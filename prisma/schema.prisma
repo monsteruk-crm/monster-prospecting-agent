@@ -1,0 +1,17 @@
+datasource db {
+  provider = "postgresql"
+}
+
+generator client {
+  provider = "prisma-client"
+  output   = "./generated"
+}
+
+// Act 0 connectivity marker only. Business entities arrive in later acts.
+model BootstrapHealthCheck {
+  id        String   @id @default(cuid())
+  status    String
+  createdAt DateTime @default(now())
+
+  @@map("bootstrap_health_checks")
+}
