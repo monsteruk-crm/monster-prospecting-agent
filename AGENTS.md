@@ -36,7 +36,7 @@ Important qualifications:
 - The current checklist is authoritative for commercial, operational, contractual, staffing, venue-fit, safety, and promoter-responsibility rules.
 - The product-deck addendum is authoritative only for positioning, product story, audiences, formats, proof points, and marketing context.
 - Code and tests describe current implemented behaviour. If they conflict with an accepted ADR or authoritative plan, do not silently choose one: identify the mismatch and correct the appropriate layer within task scope.
-- Codex native memory never outranks repository documentation.
+- ChatGPT and Codex memories never outrank repository documentation.
 
 ## 3. Session startup protocol
 
@@ -46,7 +46,7 @@ Before editing:
 2. Read `docs/00-index.md`.
 3. Read `docs/STATUS.md`.
 4. Read the current task's canonical document and only the ADRs relevant to the affected area.
-5. Search Codex native memory MCP for `monster-scout`, the current milestone, relevant decisions, and known blockers.
+5. If local Codex memories are enabled for this chat, use `/memories` or the connected Codex host's local-memory controls to search compact context about `monster-scout`, the current milestone, relevant decisions, and known blockers. Do not assume ChatGPT web memory is available to the local Codex client; if local memory is unavailable, continue using repository docs.
 6. Inspect `git status`.
 7. Inspect only the code paths relevant to the task.
 8. State a concise execution plan before significant work.
@@ -346,13 +346,13 @@ Never claim a check passed if it was not run. Report exact outcomes as:
 
 Use the smallest useful validation first. Avoid running an enormous suite when a focused check can expose the issue earlier; run broader checks before final completion when practical.
 
-## 13. Native Codex memory MCP
+## 13. ChatGPT and Codex memory
 
-Codex native memory is a development-continuity tool. It is not runtime product memory and it is not a replacement for documentation.
+ChatGPT web memory and local Codex memory are separate surfaces. Local Codex memory is a development-continuity aid, not runtime product memory and not a replacement for repository documentation. Required team guidance belongs in `AGENTS.md` or checked-in docs.
 
 ### Read memory
 
-At the beginning of a task, search for compact context about:
+At the beginning of a task, when local memory is enabled, use the current chat's `/memories` controls or the connected Codex host's local memory store to search for compact context about:
 
 - project identity;
 - current milestone;
@@ -362,11 +362,13 @@ At the beginning of a task, search for compact context about:
 - previous verification;
 - exact next action.
 
+If local memory is unavailable, empty, disabled, or stale, continue from repository docs and the current implementation. Do not treat the absence of an immediate memory update as a failure: local memory generation can happen asynchronously after a chat is idle.
+
 Do not use memory as a reason to skip reading the relevant repository docs.
 
 ### Write memory
 
-Write or update memory only for durable facts:
+When local memory controls are available, allow or update memory only for durable facts:
 
 - accepted architecture decisions;
 - canonical path changes;
@@ -377,7 +379,18 @@ Write or update memory only for durable facts:
 - the next concrete action;
 - commit hash when available.
 
-Use a clear project key such as `monster-scout` and include source paths rather than copying source bodies.
+Use a clear project key such as `monster-scout` and include source paths rather than copying source bodies. Do not claim that a memory write happened immediately; local memory may be generated in a background pass. Do not manually edit generated memory files as the primary control surface. Use `/memories` or the host's memory settings to control whether a chat can use existing memories or contribute to future memories.
+
+### Configuration
+
+Local Codex memories are controlled separately from ChatGPT web memory and are off by default unless enabled by the Codex host or session. Config-based setups may use:
+
+```toml
+[features]
+memories = true
+```
+
+Memory settings include `memories.generate_memories` and `memories.use_memories`; external-context handling may be controlled by `memories.disable_on_external_context`. These settings are host/config dependent.
 
 ### Never store in memory
 
@@ -418,7 +431,7 @@ Before declaring a task complete:
 3. create or supersede an ADR only when the decision meets the ADR threshold;
 4. update `docs/00-index.md` for document lifecycle changes;
 5. update `docs/STATUS.md` when milestone, blockers, capabilities, or next actions changed;
-6. write one compact native-memory update for durable changes;
+6. when local memory is enabled and the change is durable, use the current chat's memory controls to permit a compact memory update; do not treat immediate generation as guaranteed;
 7. inspect final `git diff` and `git status`;
 8. report what was actually verified.
 

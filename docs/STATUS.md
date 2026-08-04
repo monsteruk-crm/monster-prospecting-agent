@@ -1,9 +1,9 @@
 # Status
 
-- Current milestone: Act 0 — bootstrap foundation.
-- What works now: Next.js shell, central Zod model registry, AI Gateway smoke route, Prisma schema/configuration, applied Prisma Postgres migration, database health route, focused unit tests and bootstrap documentation.
-- Intentionally not implemented: live web search, buying-signal detection, contact discovery, lead scoring, LangGraph mission execution, RAG ingestion, human interrupts and Monster CRM integration.
+- Current milestone: Act 1 — typed mission preparation.
+- What works now: Next.js shell, central Zod model registry, AI Gateway smoke route, Prisma schema/configuration, applied Prisma Postgres migration, database health route, validated sales-mission brief, LangGraph target-profile/search-strategy preparation graph, default DuckDuckGo search-provider adapter, bounded search-provider-to-safe-fetch discovery graph, SSRF-safe official-source fetching, partial-failure handling and focused unit tests.
+- Intentionally not implemented: a public discovery route, Brave or other paid search-provider adapters, buying-signal detection, contact discovery, lead scoring, durable graph checkpoints, RAG ingestion, human interrupts and Monster CRM integration.
 - Active blockers: the supplied checklist, positioning addendum and lead-sheet CSV are absent; Playwright still needs its local Chromium binary. LangSmith tracing is configured but not exercised.
-- Verification performed: `npx prisma generate`, `npx prisma migrate dev --name bootstrap_foundation`, `npm run lint`, `npm run typecheck`, `npm test` (6/6), `npm run build`, and live HTTP checks of `/` (200), `/api/health/db` (200) and `/api/smoke` (200 with structured result). Playwright is configured but blocked by the missing local Chromium binary.
-- Next three actions: restore the three missing authoritative source files; install the Playwright Chromium binary; begin Act 1 typed mission and graph state implementation.
+- Verification performed: `npx prisma generate`, `npx prisma migrate dev --name bootstrap_foundation`, `npm run lint`, `npm run typecheck`, `npm test` (28/28), `npm run build`, focused SSRF-safe fetch tests (11/11), focused discovery graph tests (4/4), focused DuckDuckGo provider tests (3/3), controlled live DuckDuckGo smoke search (typed result returned), live HTTP checks of `/` (200), `/api/health/db` (200), `/api/smoke` (200 with structured result), and `POST /api/missions` (201 with `READY_FOR_DISCOVERY`). Playwright is configured but blocked by the missing local Chromium binary.
+- Next three actions: restore the three missing authoritative source files; install the Playwright Chromium binary; implement account extraction and buying-signal verification after fetched sources.
 - Last updated: 2026-08-04; commit hash unavailable.
