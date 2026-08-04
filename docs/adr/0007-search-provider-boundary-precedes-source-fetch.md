@@ -11,7 +11,7 @@ Monster Scout needs a provider-neutral search stage before it can inspect public
 
 Define a typed `SearchProvider` interface in `lib/discovery/search-provider.ts`. The discovery graph invokes one provider request per generated query, validates every returned result with Zod, deduplicates URLs, and passes the bounded result set to `fetch_official_sources`. The fetch node invokes the existing `safe_fetchTool` by default and records only source metadata, a short excerpt and a content hash in graph state.
 
-The MVP default is `DuckDuckGoSearchProvider`, which uses DuckDuckGo's non-JavaScript HTML results surface without a paid search credential. The provider remains injectable into `discoverSalesMission` so a different adapter can be introduced later without changing the graph. No paid provider SDK, public discovery route or automatic account extraction is added in this slice.
+The MVP default is `DuckDuckGoSearchProvider`, which uses DuckDuckGo's non-JavaScript HTML results surface without a paid search credential. The provider remains injectable into `discoverSalesMission` so a different adapter can be introduced later without changing the graph. `POST /api/missions/discover` is the server boundary for a fresh bounded run. Later graph stages may interpret the fetched references, but they cannot bypass the provider, fetch budgets or safe-fetch boundary.
 
 ## Alternatives considered
 
@@ -22,7 +22,7 @@ The MVP default is `DuckDuckGoSearchProvider`, which uses DuckDuckGo's non-JavaS
 
 ## Consequences
 
-The graph is testable without network access and can swap providers behind one contract. The MVP can run the search stage with DuckDuckGo, subject to its HTML surface, rate limits and availability. Search result snippets remain discovery aids; fetched source content remains untrusted evidence until later verification and extraction stages.
+The graph is testable without network access and can swap providers behind one contract. The MVP route can run the search stage with DuckDuckGo, subject to its HTML surface, rate limits and availability. Search result snippets remain discovery aids; fetched source content remains untrusted evidence until later verification and extraction stages.
 
 ## Affected paths
 

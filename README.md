@@ -17,3 +17,5 @@ npm run dev
 Open [http://localhost:3000](http://localhost:3000) to view Sales Mission Control.
 
 See the [local-development runbook](docs/runbooks/local-development.md) for environment, Prisma, AI Gateway and verification commands.
+
+codex resume 019fcd94-3205-7033-8121-d3af7c150f7b

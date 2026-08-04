@@ -42,7 +42,17 @@ The home screen's smoke-test control calls `POST /api/smoke`. It remains blocked
 
 Act 1 mission preparation is available at `POST /api/missions`. It accepts a validated sales brief, returns a bounded target profile and search strategy, and stops at `READY_FOR_DISCOVERY`; it performs no live research.
 
-The discovery graph is available as the server-side `discoverSalesMission` function in `lib/graph/sales-mission-discovery.ts`. It defaults to `DuckDuckGoSearchProvider`, which uses DuckDuckGo's non-JavaScript HTML results surface and requires no Brave credential. It calls the provider within the mission search budget, then invokes the SSRF-safe `safe_fetchTool` within the page budget. A different provider can be injected for tests or future deployments; no public discovery route is configured yet.
+The discovery graph is available through the `POST /api/missions/discover` Node.js route and the server-side `discoverSalesMission` function in `lib/graph/sales-mission-discovery.ts`. It defaults to `DuckDuckGoSearchProvider`, which uses DuckDuckGo's non-JavaScript HTML results surface and requires no Brave credential. It calls the provider within the mission search budget, invokes the SSRF-safe `safe_fetchTool` within the page budget, then runs bounded account extraction and buying-signal verification using the `EXTRACTION_MODEL` and `VERIFICATION_MODEL` registry roles. A different provider or test extractor/verifier can be injected into the graph function.
+
+Run it locally after starting Next.js:
+
+```bash
+curl --request POST http://localhost:3000/api/missions/discover \
+  --header 'content-type: application/json' \
+  --data '{"name":"DACH promoter hunt","geographies":["Germany"],"accountCategories":["TICKETED_EVENT_PROMOTER"],"buyerRoles":["Managing Director"]}'
+```
+
+The route starts a fresh bounded run, performs live DuckDuckGo and source fetch requests, extracts accounts from short source excerpts, verifies buying-signal candidates, returns `201` with partial results/errors, and does not persist or resume a mission yet. The response includes source-linked `accounts[]` and `buyingSignals[]`; a signal with no supported excerpt or no verification remains explicitly unverified with `MISSING_INFORMATION` and/or `UNKNOWN` freshness.
 
 The controlled DuckDuckGo smoke check is:
 

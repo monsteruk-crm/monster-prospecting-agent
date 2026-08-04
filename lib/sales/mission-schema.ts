@@ -107,10 +107,100 @@ export const FetchedSourceReferenceSchema = z.object({
   searchQuery: nonEmptyText.max(500),
 });
 
+export const EvidenceStateSchema = z.enum([
+  "FACT",
+  "COMMERCIAL_SIGNAL",
+  "INFERENCE",
+  "MISSING_INFORMATION",
+  "CONFLICT",
+  "MONSTER_KNOWLEDGE",
+  "SALES_RULE",
+]);
+
+export const SignalFreshnessSchema = z.enum([
+  "CURRENT",
+  "RECENT",
+  "OLD",
+  "UNKNOWN",
+]);
+
+export const BuyingSignalTypeSchema = z.enum([
+  "NEW_PROGRAMME",
+  "EXPANSION",
+  "NEW_MARKET",
+  "NEW_EVENT",
+  "PARTNERSHIP",
+  "HIRING",
+  "SEASONAL_PROGRAMME",
+  "COMPARABLE_ATTRACTION",
+  "FUNDING_OR_CONTRACT",
+  "OTHER",
+]);
+
+const IsoDateSchema = z.string().regex(/^\d{4}-\d{2}-\d{2}$/);
+
+export const AccountBuyingSignalExtractionSchema = z.object({
+  signalType: BuyingSignalTypeSchema,
+  summary: nonEmptyText.max(600),
+  eventDate: IsoDateSchema.nullable(),
+  evidenceExcerpt: z.string().trim().max(500),
+});
+
+export const AccountExtractionProposalSchema = z.object({
+  companyName: nonEmptyText.max(200),
+  officialDomain: z.string().url().nullable(),
+  website: z.string().url().nullable(),
+  country: z.string().trim().min(2).max(100).nullable(),
+  city: z.string().trim().min(1).max(100).nullable(),
+  categories: z.array(ProspectCategorySchema).min(1).max(8),
+  relevanceHypothesis: nonEmptyText.max(1000),
+  possibleBuyerRoles: boundedList,
+  buyingSignals: z.array(AccountBuyingSignalExtractionSchema).max(10),
+  unresolvedQuestions: boundedList,
+});
+
+export const AccountExtractionCandidateSchema = z.object({
+  accountKey: nonEmptyText.max(300),
+  sourceUrl: z.string().url(),
+  finalUrl: z.string().url(),
+  sourceContentHash: z.string().regex(/^[a-f0-9]{64}$/),
+  sourceExcerpt: z.string().trim().max(600),
+  account: AccountExtractionProposalSchema,
+});
+
+export const BuyingSignalCandidateSchema = z.object({
+  candidateId: nonEmptyText.max(400),
+  accountKey: nonEmptyText.max(300),
+  companyName: nonEmptyText.max(200),
+  signalType: BuyingSignalTypeSchema,
+  summary: nonEmptyText.max(600),
+  eventDate: IsoDateSchema.nullable(),
+  evidenceExcerpt: z.string().trim().max(500),
+  sourceUrl: z.string().url(),
+  sourceContentHash: z.string().regex(/^[a-f0-9]{64}$/),
+  sourceExcerpt: z.string().trim().max(600),
+});
+
+export const BuyingSignalVerificationProposalSchema = z.object({
+  candidateId: nonEmptyText.max(400),
+  verified: z.boolean(),
+  evidenceState: EvidenceStateSchema,
+  confidence: z.number().min(0).max(1),
+  reason: nonEmptyText.max(600),
+  eventDate: IsoDateSchema.nullable(),
+  evidenceExcerpt: z.string().trim().max(500),
+});
+
+export const BuyingSignalVerificationBatchSchema = z.object({
+  signals: z.array(BuyingSignalVerificationProposalSchema).max(20),
+});
+
 export const DiscoveryStageSchema = z.enum([
   "SEARCH_PROVIDER",
   "OFFICIAL_SOURCE_FETCH",
-  "READY_FOR_INVESTIGATION",
+  "ACCOUNT_EXTRACTION",
+  "BUYING_SIGNAL_VERIFICATION",
+  "READY_FOR_REVIEW",
 ]);
 
 export const BudgetSchema = z.object({
@@ -125,6 +215,7 @@ export const BudgetSchema = z.object({
 });
 
 export const DiscoveredAccountSchema = z.object({
+  accountKey: nonEmptyText.max(300),
   companyName: nonEmptyText.max(200),
   officialDomain: z.string().url().optional(),
   website: z.string().url().optional(),
@@ -136,6 +227,24 @@ export const DiscoveredAccountSchema = z.object({
   possibleBuyerRoles: z.array(nonEmptyText),
   discoveryEvidenceIds: z.array(nonEmptyText),
   unresolvedQuestions: z.array(nonEmptyText),
+});
+
+export const VerifiedBuyingSignalSchema = z.object({
+  signalId: nonEmptyText.max(400),
+  accountKey: nonEmptyText.max(300),
+  companyName: nonEmptyText.max(200),
+  signalType: BuyingSignalTypeSchema,
+  summary: nonEmptyText.max(600),
+  eventDate: IsoDateSchema.nullable(),
+  freshness: SignalFreshnessSchema,
+  evidenceState: EvidenceStateSchema,
+  verified: z.boolean(),
+  confidence: z.number().min(0).max(1),
+  verificationReason: nonEmptyText.max(600),
+  evidenceExcerpt: z.string().trim().max(500),
+  sourceUrl: z.string().url(),
+  sourceContentHash: z.string().regex(/^[a-f0-9]{64}$/),
+  evidenceId: nonEmptyText.max(200),
 });
 
 export const GraphWarningSchema = z.object({
@@ -166,3 +275,8 @@ export type SearchResult = z.infer<typeof SearchResultSchema>;
 export type FetchedSourceReference = z.infer<typeof FetchedSourceReferenceSchema>;
 export type Budget = z.infer<typeof BudgetSchema>;
 export type DiscoveredAccount = z.infer<typeof DiscoveredAccountSchema>;
+export type AccountExtractionProposal = z.infer<typeof AccountExtractionProposalSchema>;
+export type AccountExtractionCandidate = z.infer<typeof AccountExtractionCandidateSchema>;
+export type BuyingSignalCandidate = z.infer<typeof BuyingSignalCandidateSchema>;
+export type BuyingSignalVerificationBatch = z.infer<typeof BuyingSignalVerificationBatchSchema>;
+export type VerifiedBuyingSignal = z.infer<typeof VerifiedBuyingSignalSchema>;

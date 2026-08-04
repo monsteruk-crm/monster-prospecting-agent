@@ -5,6 +5,7 @@ import {
   type PreparedSalesMissionForDiscovery,
 } from "@/lib/graph/sales-mission-discovery";
 import { prepareSalesMission } from "@/lib/graph/sales-mission-preparation";
+import type { AccountExtractionProposal } from "@/lib/sales/mission-schema";
 import { SafeFetchError, safeFetchTool, type SafeFetchResult } from "@/lib/tools/safe-fetch";
 
 const contentHash = "a".repeat(64);
@@ -21,6 +22,45 @@ function fetchedSource(url: string, text = "Official programme evidence"): SafeF
     contentHash,
     retrievedAt: "2026-08-04T12:00:00.000Z",
     redirectCount: 0,
+  };
+}
+
+function extractionResult(): AccountExtractionProposal {
+  return {
+    companyName: "Acme Events",
+    officialDomain: null,
+    website: null,
+    country: "Germany",
+    city: "Berlin",
+    categories: ["TICKETED_EVENT_PROMOTER" as const],
+    relevanceHypothesis: "The organisation appears to operate public ticketed programmes.",
+    possibleBuyerRoles: ["Managing Director"],
+    buyingSignals: [
+      {
+        signalType: "NEW_PROGRAMME" as const,
+        summary: "A new public programme is described.",
+        eventDate: null,
+        evidenceExcerpt: "Official programme evidence",
+      },
+    ],
+    unresolvedQuestions: ["Confirm the correct commercial owner."],
+  };
+}
+
+function extractionDependencies() {
+  return {
+    extractAccount: vi.fn(async () => extractionResult()),
+    verifySignals: vi.fn(async ({ signals }: { signals: Array<{ candidateId: string; evidenceExcerpt: string }> }) => ({
+      signals: signals.map((signal) => ({
+        candidateId: signal.candidateId,
+        verified: true,
+        evidenceState: "COMMERCIAL_SIGNAL" as const,
+        confidence: 0.9,
+        reason: "The fetched excerpt directly supports the candidate signal.",
+        eventDate: null,
+        evidenceExcerpt: signal.evidenceExcerpt,
+      })),
+    })),
   };
 }
 
@@ -83,8 +123,9 @@ describe("sales mission discovery graph", () => {
       events.push(`fetch:${url}`);
       return fetchedSource(url);
     });
+    const extraction = extractionDependencies();
 
-    const state = await discoverSalesMission(prepared, { searchProvider, fetchSource });
+    const state = await discoverSalesMission(prepared, { searchProvider, fetchSource, ...extraction });
 
     expect(events.filter((event) => event.startsWith("search:")).length).toBe(2);
     expect(events.findIndex((event) => event.startsWith("fetch:"))).toBe(2);
@@ -92,10 +133,17 @@ describe("sales mission discovery graph", () => {
     expect(state.searchResults).toHaveLength(1);
     expect(state.fetchedSources).toHaveLength(1);
     expect(state.fetchedSources[0].readableExcerpt).toBe("Official programme evidence");
-    expect(state.discoveryStage).toBe("READY_FOR_INVESTIGATION");
+    expect(state.discoveryStage).toBe("READY_FOR_REVIEW");
     expect(state.budget.searchesUsed).toBe(2);
     expect(state.budget.pagesUsed).toBe(1);
     expect(state.evidenceIds).toEqual([`source:${contentHash}`]);
+    expect(state.discoveredAccounts[0].companyName).toBe("Acme Events");
+    expect(state.buyingSignals[0]).toMatchObject({
+      signalType: "NEW_PROGRAMME",
+      verified: true,
+      evidenceState: "COMMERCIAL_SIGNAL",
+      freshness: "UNKNOWN",
+    });
   });
 
   test("keeps a partial result when one official source fetch fails", async () => {
@@ -126,8 +174,9 @@ describe("sales mission discovery graph", () => {
         },
       ]),
     };
+    const extraction = extractionDependencies();
 
-    const state = await discoverSalesMission(prepared, { searchProvider, fetchSource });
+    const state = await discoverSalesMission(prepared, { searchProvider, fetchSource, ...extraction });
 
     expect(state.fetchedSources).toHaveLength(1);
     expect(state.errors).toContainEqual({
@@ -135,8 +184,52 @@ describe("sales mission discovery graph", () => {
       message: "Official-source fetch failed for https://blocked.org/programme: Private destination blocked.",
       retryable: false,
     });
-    expect(state.discoveryStage).toBe("READY_FOR_INVESTIGATION");
+    expect(state.discoveryStage).toBe("READY_FOR_REVIEW");
     expect(state.status).toBe("RUNNING");
+  });
+
+  test("derives freshness only from a source-supported event date", async () => {
+    const prepared = await preparedMission({ maxSearches: 1, maxPages: 1 });
+    const extraction = extractionDependencies();
+    extraction.extractAccount.mockResolvedValue({
+      ...extractionResult(),
+      buyingSignals: [
+        {
+          signalType: "NEW_PROGRAMME",
+          summary: "A dated public programme is described.",
+          eventDate: "2026-07-15",
+          evidenceExcerpt: "Official programme evidence 2026-07-15",
+        },
+      ],
+    });
+    const searchProvider = {
+      search: vi.fn(async (request) => [
+        {
+          title: "Dated source",
+          url: "https://acme.org/programme",
+          snippet: "Dated.",
+          providerRank: 1,
+          query: request.query,
+          discoveryTime: "2026-08-04T12:00:00.000Z",
+        },
+      ]),
+    };
+    const fetchSource = vi.fn(async ({ url }: { url: string }) =>
+      fetchedSource(url, "Official programme evidence 2026-07-15"),
+    );
+
+    const state = await discoverSalesMission(prepared, {
+      searchProvider,
+      fetchSource,
+      ...extraction,
+      now: () => new Date("2026-08-04T12:00:00.000Z"),
+    });
+
+    expect(state.buyingSignals[0]).toMatchObject({
+      eventDate: "2026-07-15",
+      freshness: "CURRENT",
+      verified: true,
+    });
   });
 
   test("uses safe_fetchTool as the default source fetcher", async () => {
@@ -156,8 +249,9 @@ describe("sales mission discovery graph", () => {
     const invoke = vi
       .spyOn(safeFetchTool, "invoke")
       .mockResolvedValue(fetchedSource("https://acme.org/programme") as never);
+    const extraction = extractionDependencies();
 
-    const state = await discoverSalesMission(prepared, { searchProvider });
+    const state = await discoverSalesMission(prepared, { searchProvider, ...extraction });
 
     expect(invoke).toHaveBeenCalledWith({ url: "https://acme.org/programme" });
     expect(state.fetchedSources).toHaveLength(1);
@@ -186,8 +280,9 @@ describe("sales mission discovery graph", () => {
       ]),
     };
     const fetchSource = vi.fn(async ({ url }: { url: string }) => fetchedSource(url));
+    const extraction = extractionDependencies();
 
-    const state = await discoverSalesMission(prepared, { searchProvider, fetchSource });
+    const state = await discoverSalesMission(prepared, { searchProvider, fetchSource, ...extraction });
 
     expect(searchProvider.search).toHaveBeenCalledTimes(1);
     expect(fetchSource).toHaveBeenCalledTimes(1);
