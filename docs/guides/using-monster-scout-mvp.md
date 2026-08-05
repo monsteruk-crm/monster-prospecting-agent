@@ -31,7 +31,9 @@ flowchart LR
 
 The MVP currently includes:
 
-- a Sales Mission Control screen;
+- a Scout home with recent missions and prospects;
+- a focused New mission builder;
+- a Runs history and run dossier screen;
 - bounded discovery for up to five candidate accounts;
 - DuckDuckGo search through a provider adapter;
 - SSRF-safe public page fetching;
@@ -194,9 +196,9 @@ This reports whether LangSmith tracing is configured without exposing credential
 
 A configured response does not independently prove that traces reached the expected LangSmith workspace. Confirm that separately after a live model run.
 
-## AI Gateway smoke test
+## Diagnostics and technical checks
 
-Use the **Run AI Gateway smoke test** button on Mission Control, or call:
+Technical checks belong on `/diagnostics`, not in Nick's primary hunt workflow. Use the **Run gateway check** action there, or call:
 
 ```text
 POST /api/smoke
@@ -264,7 +266,7 @@ The dossier begins with a **Mission brief** panel showing the exact owner, geogr
 
 ## Saved run IDs and deeper search
 
-Mission Control keeps an **Executed runs** list backed by PostgreSQL. Each row shows the mission name, durable `missionRunId`, status and discovery stage; use **Open** to retrieve the dossier again. The dossier’s live/saved output includes the executed queries and their result counts.
+The **Runs** page keeps mission history backed by PostgreSQL. Each row shows the mission name, durable `missionRunId`, status and discovery stage; use **Open** to retrieve the dossier again. The dossier’s live/saved output includes the executed queries and their result counts. The run ID is available inside the dossier/audit surface rather than as a primary dashboard input.
 
 Use **Search deeper** on a completed dossier when the first pass did not reach enough useful official sources. This performs another bounded pass using the same mission strategy, requests a deeper search-result window, skips URLs already saved for that run, and persists the new results under the same `missionRunId`. It does not create an unbounded crawler or a separate unowned search.
 
@@ -395,7 +397,7 @@ Partial failure does not invalidate other successfully researched accounts.
 
 # 6. Record a review decision
 
-The Mission Control UI currently exposes:
+The Scout UI currently exposes:
 
 - **Approve**;
 - **Reject**;
@@ -591,7 +593,7 @@ Run this sequence after setup:
 
 1. Open `/api/health/db` and confirm the database is healthy.
 2. Open `/api/health/observability` and note tracing configuration.
-3. Run the AI Gateway smoke test.
+3. If needed, open Diagnostics and run the AI Gateway check.
 4. Launch a mission with a focused geography and buyer role.
 5. Watch the live query/stage output while the streamed run finishes.
 6. Confirm the dossier contains source-backed account records.

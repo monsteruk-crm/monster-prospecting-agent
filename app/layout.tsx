@@ -13,11 +13,11 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: {
-    default: "MONSTER SCOUT — Sales Mission Control",
+    title: {
+    default: "MONSTER SCOUT — Commercial intelligence",
     template: "%s | MONSTER SCOUT",
   },
-  description: "The AI hunting machine for the next Monster deal.",
+  description: "Find credible organisations and prepare the next commercial move.",
 };
 
 export default function RootLayout({

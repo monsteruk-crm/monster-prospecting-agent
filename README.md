@@ -21,13 +21,13 @@ npm run prisma:migrate
 npm run dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) to use Sales Mission Control.
+Open [http://localhost:3000](http://localhost:3000) to use Scout. The primary workflow is split across Scout home, New mission, Runs, Costs, Settings, and secondary Diagnostics screens.
 
 See the [local-development runbook](docs/runbooks/local-development.md) for database, AI Gateway, LangSmith, knowledge ingestion, verification and CRM dry-run configuration.
 
 ## MVP boundaries
 
-- Discovery currently runs synchronously; UI progress labels are not streamed graph events.
+- Discovery can stream named progress and search events; saved run output remains available after completion.
 - Research-gap capture records a change request but does not automatically re-run research.
 - HTTP 403 source failures remain visible and are not bypassed.
 - First-move output is a human-reviewed draft and is never sent automatically.
@@ -46,3 +46,4 @@ npm run test:e2e
 npm run knowledge:ingest
 npm run knowledge:evaluate
 ```
+codex resume 019fcd94-3205-7033-8121-d3af7c150f7b

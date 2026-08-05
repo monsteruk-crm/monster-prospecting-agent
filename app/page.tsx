@@ -1,6 +1,6 @@
-import { MissionControl } from "@/components/mission-control";
 import { AppShell } from "@/components/app-shell";
+import { ScoutHome } from "@/components/scout-home";
 
 export default function Home() {
-  return <AppShell><MissionControl /></AppShell>;
+  return <AppShell><ScoutHome /></AppShell>;
 }

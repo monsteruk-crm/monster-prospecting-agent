@@ -79,7 +79,7 @@ The application is a standalone Next.js App Router project.
 
 ```mermaid
 flowchart LR
-  Human[Nick / reviewer] --> UI[Mission Control UI]
+  Human[Nick / reviewer] --> UI[Scout product shell]
   UI --> API[Next.js route handlers]
   API --> Graph[LangGraph mission workflow]
   Graph --> Search[SearchProvider adapter]
@@ -147,7 +147,7 @@ The bounded discovery path remains available as one HTTP request for API compati
 POST /api/missions/discover
 ```
 
-Mission Control uses the streamed route instead:
+The Scout run screen uses the streamed route instead:
 
 ```text
 POST /api/missions/discover/stream
@@ -160,7 +160,7 @@ This distinction matters:
 ```mermaid
 sequenceDiagram
   participant U as User
-  participant UI as Mission Control
+  participant UI as Scout shell
   participant API as /api/missions/discover/stream
   participant G as LangGraph
   participant DB as Postgres
@@ -211,7 +211,7 @@ flowchart LR
 
 A separate `POST /api/missions` route can stop at this preparation stage without performing live web research.
 
-The Mission Control MVP launches the combined preparation-and-discovery route directly.
+The New mission screen launches the combined preparation-and-discovery route directly.
 
 ---
 
