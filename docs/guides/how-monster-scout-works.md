@@ -133,15 +133,21 @@ stateDiagram-v2
 
 The exact persisted enum names may differ by entity, but the behavioural boundary is as shown.
 
-## Synchronous discovery
+## Discovery execution and live progress
 
-The entire bounded discovery path currently runs inside one HTTP request to:
+The bounded discovery path remains available as one HTTP request for API compatibility:
 
 ```text
 POST /api/missions/discover
 ```
 
-The server does not stream graph events to the browser. The UI changes local status text while waiting.
+Mission Control uses the streamed route instead:
+
+```text
+POST /api/missions/discover/stream
+```
+
+It receives newline-delimited stage and search-query events while the graph runs. Each event is also persisted against the `missionRunId`, so a refresh or later dossier read can recover the saved output. The synchronous route remains useful for callers that only need the completed JSON response.
 
 This distinction matters:
 
@@ -149,27 +155,27 @@ This distinction matters:
 sequenceDiagram
   participant U as User
   participant UI as Mission Control
-  participant API as /api/missions/discover
+  participant API as /api/missions/discover/stream
   participant G as LangGraph
   participant DB as Postgres
 
   U->>UI: Launch mission
   UI->>UI: Show "Preparing mission"
   UI->>API: POST sales brief
-  UI->>UI: Show broad progress labels
+  UI->>UI: Show streamed stage and query events
   API->>G: Invoke bounded graph
   G->>G: Search, fetch, extract, verify
   G->>DB: Persist entities and checkpoint
   DB-->>G: Saved
   G-->>API: Completed bounded result
-  API-->>UI: 201 + missionRunId
+  API-->>UI: 200 NDJSON + missionRunId
   UI->>API: GET /api/runs/:id
   API->>DB: Load persisted dossier
   DB-->>API: Dossier
   API-->>UI: Render review-ready accounts
 ```
 
-The progress labels improve usability but must not be represented as live node-level streaming.
+The stream exposes named workflow stages and bounded query metadata, not hidden chain-of-thought or raw page bodies. The same run can later be continued through `POST /api/runs/:missionRunId/search-more`; the additional query results and progress remain attached to that run.
 
 ---
 
