@@ -24,12 +24,18 @@ import {
   type VerifiedBuyingSignal,
 } from "@/lib/sales/mission-schema";
 import { scoreProspectAccount } from "@/lib/sales/score-engine";
-import { deriveContactRoutes } from "@/lib/sales/contact-route-engine";
+import { deriveContactRoutes, requiresPublicEmail } from "@/lib/sales/contact-route-engine";
 import {
   PersistedReviewSchema,
   type PersistedReview,
 } from "@/lib/sales/review-schema";
 import { z } from "zod";
+import {
+  MissionProgressRecordSchema,
+  MissionSearchProgressEventSchema,
+  type MissionSearchProgressEvent,
+  type MissionProgressRecord,
+} from "@/lib/sales/mission-progress";
 
 type GraphWarning = z.infer<typeof GraphWarningSchema>;
 type GraphError = z.infer<typeof GraphErrorSchema>;
@@ -63,6 +69,19 @@ export type PersistedDiscovery = {
   accountIds: string[];
   evidenceIds: string[];
   buyingSignalIds: string[];
+};
+
+export type PersistMissionProgressInput = {
+  missionId: string;
+  missionRunId: string;
+  sequence: number;
+  event: MissionProgressRecord;
+};
+
+export type PersistMissionSearchProgressInput = {
+  missionId: string;
+  missionRunId: string;
+  event: MissionSearchProgressEvent;
 };
 
 type PersistenceClient = PrismaClient | Prisma.TransactionClient;
@@ -183,6 +202,94 @@ export async function persistPreparedMission(
   });
 }
 
+export async function persistMissionProgress(
+  rawInput: PersistMissionProgressInput,
+  client: PersistenceClient = getPrismaClient(),
+): Promise<void> {
+  const event = MissionProgressRecordSchema.parse(rawInput.event);
+  const idempotencyKey = `${rawInput.missionRunId}:progress:${rawInput.sequence}`;
+  await client.$transaction(async (transaction) => {
+    await transaction.salesMissionRun.update({
+      where: { id: rawInput.missionRunId },
+      data: {
+        status: event.status,
+        discoveryStage: event.stage,
+      },
+    });
+    await transaction.missionAuditEvent.upsert({
+      where: { idempotencyKey },
+      create: {
+        id: `audit:${idempotencyKey}`,
+        idempotencyKey,
+        missionId: rawInput.missionId,
+        missionRunId: rawInput.missionRunId,
+        eventType: "MISSION_PROGRESS",
+        payload: asJson(event),
+        occurredAt: new Date(event.occurredAt),
+      },
+      update: { payload: asJson(event), occurredAt: new Date(event.occurredAt) },
+    });
+  });
+}
+
+export async function persistMissionSearchProgress(
+  rawInput: PersistMissionSearchProgressInput,
+  client: PersistenceClient = getPrismaClient(),
+): Promise<void> {
+  const event = MissionSearchProgressEventSchema.parse(rawInput.event);
+  const idempotencyKey = `${rawInput.missionRunId}:search:${event.queryIndex}:${event.query}:${event.searchesUsed}`;
+  await client.$transaction(async (transaction) => {
+    const run = await transaction.salesMissionRun.findUnique({
+      where: { id: rawInput.missionRunId },
+      select: { budget: true },
+    });
+    const budget = run?.budget && typeof run.budget === "object" && !Array.isArray(run.budget)
+      ? { ...(run.budget as Record<string, unknown>), searchesUsed: event.searchesUsed }
+      : undefined;
+    await transaction.salesMissionRun.update({
+      where: { id: rawInput.missionRunId },
+      data: {
+        status: "RUNNING",
+        discoveryStage: "SEARCH_PROVIDER",
+        searchResults: asJson(event.searchResults),
+        ...(budget ? { budget: asJson(budget) } : {}),
+      },
+    });
+    await transaction.missionAuditEvent.upsert({
+      where: { idempotencyKey },
+      create: {
+        id: `audit:${idempotencyKey}`,
+        idempotencyKey,
+        missionId: rawInput.missionId,
+        missionRunId: rawInput.missionRunId,
+        eventType: "MISSION_SEARCH_PROGRESS",
+        payload: asJson(event),
+      },
+      update: { payload: asJson(event) },
+    });
+  });
+}
+
+export async function listMissionRuns(
+  limit = 20,
+  client: PersistenceClient = getPrismaClient(),
+) {
+  const boundedLimit = Math.min(Math.max(Math.trunc(limit), 1), 50);
+  return client.salesMissionRun.findMany({
+    orderBy: { startedAt: "desc" },
+    take: boundedLimit,
+    select: {
+      id: true,
+      status: true,
+      discoveryStage: true,
+      startedAt: true,
+      completedAt: true,
+      mission: { select: { id: true, name: true, owner: true, productFocus: true } },
+      review: { select: { status: true } },
+    },
+  });
+}
+
 export async function persistDiscoveryResult(
   rawInput: DiscoveryPersistenceInput,
   client: PersistenceClient = getPrismaClient(),
@@ -202,13 +309,19 @@ export async function persistDiscoveryResult(
       const accountSource = fetchedSources.find((source) =>
         account.discoveryEvidenceIds.includes(`source:${source.contentHash}`),
       );
+      const contactRoutes = deriveContactRoutes(account, fetchedSources, prepared.brief.buyerRoles, {
+        requirePublicEmail: requiresPublicEmail(prepared.brief),
+      });
+      if (requiresPublicEmail(prepared.brief) && contactRoutes.length === 0) {
+        continue;
+      }
       const score = scoreProspectAccount(
         account,
         buyingSignals,
         prepared.brief,
         accountSource ?? { status: 200, readableExcerpt: "" },
+        contactRoutes,
       );
-      const contactRoutes = deriveContactRoutes(account, fetchedSources);
       const id = accountEntityId(prepared.missionId, account.accountKey);
       accountIdsByKey.set(account.accountKey, id);
       await transaction.prospectAccount.upsert({

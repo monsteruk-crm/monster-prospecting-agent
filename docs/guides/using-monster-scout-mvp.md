@@ -54,8 +54,8 @@ The MVP currently includes:
 
 Before using the application, understand these limits:
 
-1. **Research is synchronous.** The launch request remains open until the bounded discovery run finishes.
-2. **Progress labels are not streamed graph events.** The UI displays named client-side stages while the synchronous request runs.
+1. **Research is streamed.** The launch request returns newline-delimited progress events while the bounded discovery run continues.
+2. **Progress is durable.** Stage events and executed-query events are persisted against the mission run and can be retrieved after refresh.
 3. **Research-gap capture does not trigger new research.** It records a structured `CHANGES_REQUESTED` item for later follow-up.
 4. **HTTP 403 responses are not bypassed.** Blocked sources remain visible as partial research failures.
 5. **First-move drafts are never sent automatically.** They are persisted drafts for human use.
@@ -213,14 +213,20 @@ On the home screen, use **Launch bounded mission**.
 The current form accepts:
 
 - **Mission name** — a useful label for the hunt;
-- **Geography** — one target country or region entered as text;
-- **Buyer role** — the public professional role the research should prefer.
+- **Owner** — the named person responsible for the mission;
+- **Geography or regions** — one or more comma-separated countries or regions;
+- **Account category** — the organisation type to prioritise;
+- **Product focus** — The Monster, Mega Bounce House or undecided;
+- **Contact requirement** — any verified route, or only a publicly confirmed email;
+- **Buyer roles** — one or more comma-separated public professional roles;
+- **Required and preferred signals** — comma-separated timing or commercial signals;
+- **Freshness window** — how recent evidence should be;
+- **Exclusions** — categories or sources to avoid;
+- **Instructions** — additional bounded guidance for this hunt.
 
-The current UI fixes the account category to:
+The submitted fields are persisted as the mission brief and displayed at the top of the dossier. Research limits remain fixed in the MVP UI: up to five accounts, 12 searches, 20 pages, 20 model calls and USD 2 estimated model cost.
 
-```text
-TICKETED_EVENT_PROMOTER
-```
+Choose **Only publicly confirmed email** when a role-only route is not useful enough. The run filters accounts before persistence if no email appears in the fetched official-source excerpt. The wording `return only contacts with an email` in instructions activates the same rule for API callers and older UI submissions. The result can contain fewer than five accounts, including zero; this is intentional rather than a fallback to role-only contacts.
 
 The UI submits these default run limits:
 
@@ -236,22 +242,31 @@ These are bounded safety limits, not targets that must always be consumed.
 
 ## What happens after launch
 
-The browser sends one synchronous request to:
+The browser sends a streamed request to:
 
 ```text
-POST /api/missions/discover
+POST /api/missions/discover/stream
 ```
 
-The UI displays broad progress messages while the server completes the run:
+The UI displays saved stage and query output while the server completes the run:
 
-1. preparing the mission;
-2. searching DuckDuckGo and fetching official sources;
-3. research complete and dossier loading;
-4. ready for review.
+1. mission brief persisted and run ID created;
+2. each DuckDuckGo query completed or failed, including new result counts;
+3. official-source fetching progress;
+4. account extraction and buying-signal verification progress;
+5. ready for review.
 
-These messages are currently UI status labels. They are not live LangGraph event streaming.
+The messages are newline-delimited progress events persisted as mission audit records. Raw page bodies are never streamed.
 
 When successful, the returned `missionRunId` is placed into the dossier field and the persisted dossier loads automatically.
+
+The dossier begins with a **Mission brief** panel showing the exact owner, geographies, category, product focus, buyer roles, signal preferences, freshness window, exclusions and instructions used for the run. This separates the research brief from the resulting prospect accounts.
+
+## Saved run IDs and deeper search
+
+Mission Control keeps an **Executed runs** list backed by PostgreSQL. Each row shows the mission name, durable `missionRunId`, status and discovery stage; use **Open** to retrieve the dossier again. The dossier’s live/saved output includes the executed queries and their result counts.
+
+Use **Search deeper** on a completed dossier when the first pass did not reach enough useful official sources. This performs another bounded pass using the same mission strategy, requests a deeper search-result window, skips URLs already saved for that run, and persists the new results under the same `missionRunId`. It does not create an unbounded crawler or a separate unowned search.
 
 ## Why a mission may return fewer than five accounts
 
@@ -351,6 +366,8 @@ A useful route may be:
 - a relevant public role;
 - a public partnership or commercial contact page;
 - an official generic business route.
+
+When a public email is present in the fetched official-source excerpt, the dossier shows a clickable `mailto:` address and the approved CSV populates `email`. No email address is guessed from a person's name, domain or naming pattern.
 
 The system does not guess personal email addresses.
 
@@ -574,7 +591,7 @@ Run this sequence after setup:
 2. Open `/api/health/observability` and note tracing configuration.
 3. Run the AI Gateway smoke test.
 4. Launch a mission with a focused geography and buyer role.
-5. Wait for the synchronous run to finish.
+5. Watch the live query/stage output while the streamed run finishes.
 6. Confirm the dossier contains source-backed account records.
 7. Inspect warnings and HTTP 403 partial errors.
 8. Check signal freshness and evidence excerpts.

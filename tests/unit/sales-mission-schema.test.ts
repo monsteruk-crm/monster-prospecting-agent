@@ -12,6 +12,7 @@ describe("sales mission brief schema", () => {
     });
 
     expect(brief.productFocus).toBe("THE_MONSTER");
+    expect(brief.contactRequirement).toBe("ANY_ROUTE");
     expect(brief.limits.maxCandidateAccounts).toBe(5);
     expect(brief.freshnessWindowDays).toBe(365);
   });

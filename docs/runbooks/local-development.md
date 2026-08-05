@@ -72,11 +72,15 @@ curl --request POST http://localhost:3000/api/missions/discover \
   --data '{"name":"DACH promoter hunt","geographies":["Germany"],"accountCategories":["TICKETED_EVENT_PROMOTER"],"buyerRoles":["Managing Director"]}'
 ```
 
-The route starts a fresh bounded run, persists the prepared mission, performs live DuckDuckGo and source fetch requests, extracts accounts from short source excerpts, verifies buying-signal candidates, persists scored entities and a `PENDING` review snapshot, then returns `201` with partial results/errors. The response includes source-linked `accounts[]`, `buyingSignals[]` and `review`; a signal with no supported excerpt or no verification remains explicitly unverified with `MISSING_INFORMATION` and/or `UNKNOWN` freshness. The graph is checkpointed after verification. HTTP 403 source failures remain visible as partial errors rather than being bypassed.
+The route starts a fresh bounded run, persists the prepared mission brief and search strategy, performs live DuckDuckGo and source fetch requests, filters known review sites, job boards, directories, ticket resellers and non-first-party paths before `safe_fetch`, extracts accounts from short source excerpts, verifies buying-signal candidates, persists scored entities and a `PENDING` review snapshot, then returns `201` with partial results/errors. The response includes source-linked `accounts[]`, `buyingSignals[]` and `review`; a signal with no supported excerpt or no verification remains explicitly unverified with `MISSING_INFORMATION` and/or `UNKNOWN` freshness. The graph is checkpointed after verification. HTTP 403 source failures remain visible as partial errors rather than being bypassed.
+
+Mission Control exposes the full MVP brief before launch and shows the persisted brief above the account dossiers after launch. Geography, buyer roles, required/preferred signals and exclusions are entered as comma-separated values. Set `Contact requirement` to `Only publicly confirmed email` when every returned account must have an email; the same rule is also recognised from instructions such as `return only contacts with an email`.
+
+Mission Control launches through `POST /api/missions/discover/stream`, so the page shows saved stage/query events while the graph runs. Every run ID is written to PostgreSQL. The `Executed runs` panel loads `GET /api/runs?limit=20`; opening a row calls `GET /api/runs/:missionRunId`. Use `Search deeper` on a completed dossier to call `POST /api/runs/:missionRunId/search-more`; it adds bounded budget, deduplicates previous URLs and attaches new query/search progress to the same run.
 
 Use `GET /api/runs/:missionRunId` to load the dossier. Record a review with `POST /api/runs/:missionRunId/review` and `{ "action": "APPROVE", "reviewer": "Nick" }`; approval, rejection, duplicate and do-not-contact decisions resume the checkpointed thread, while `EDIT` leaves the run in `CHANGES_REQUESTED`. `POST /api/runs/:missionRunId/research-gap` records `{ "question": "...", "accountId": "..." }` as a structured gap and changes the review to `CHANGES_REQUESTED`. `POST /api/runs/:missionRunId/resume` is available for explicit operational recovery.
 
-After approval, use `POST /api/prospects/:accountId/first-move` to generate one persisted `DRAFT` first-move brief. The route never sends it. Role-only contact routes are valid when no public contact page is supported by evidence; guessed email addresses are never created.
+After approval, use `POST /api/prospects/:accountId/first-move` to generate one persisted `DRAFT` first-move brief. The route never sends it. Role-only contact routes are valid for normal missions when no public contact page is supported by evidence; email-only missions omit those accounts. Guessed email addresses are never created.
 
 For the approved CSV dry-run, call:
 
@@ -87,6 +91,8 @@ curl --request POST http://localhost:3000/api/exports/leads \
 ```
 
 The response is the governed lead-sheet CSV and is available only for an `APPROVED` mission. It does not write to Monster CRM; unknown contact fields and `last_touch` remain blank.
+
+In Mission Control, approve the dossier and click `Download approved CSV` in the dossier header. Each account's contact panel shows a verified public contact page when one is supported by evidence; otherwise it clearly labels the route as role-only. Names and direct email addresses stay blank unless publicly confirmed.
 
 Validate approved records against a manually supplied CRM snapshot without writing to CRM. The request must include the configured bearer token and organisation header:
 

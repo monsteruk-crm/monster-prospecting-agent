@@ -40,6 +40,7 @@ const prepared = {
     geographies: ["Germany"],
     accountCategories: ["VISITOR_ATTRACTION" as const],
     productFocus: "THE_MONSTER" as const,
+    contactRequirement: "ANY_ROUTE" as const,
     requiredSignals: [],
     preferredSignals: [],
     buyerRoles: ["Managing Director"],

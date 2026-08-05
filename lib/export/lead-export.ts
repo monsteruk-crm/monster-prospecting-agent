@@ -78,7 +78,7 @@ export async function buildApprovedLeadExport(
       city: account.city ?? "",
       contact_name: "",
       role: route?.targetRole ?? "",
-      email: "",
+      email: route?.email ?? "",
       source_url: sourceUrl,
       category: categories.join("; "),
       "size/signals": signalText,

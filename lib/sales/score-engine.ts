@@ -5,6 +5,7 @@ import {
   type SalesMissionBrief,
   type VerifiedBuyingSignal,
 } from "@/lib/sales/mission-schema";
+import type { ContactRoute } from "@/lib/sales/contact-schema";
 
 export const ProspectScoreSchema = z.object({
   buyerFit: z.number().int().min(0).max(25),
@@ -43,6 +44,7 @@ export function scoreProspectAccount(
   signals: VerifiedBuyingSignal[],
   brief: SalesMissionBrief,
   source: { status: number; readableExcerpt: string },
+  contactRoutes: ContactRoute[] = [],
   now = new Date(),
 ): ProspectScore {
   const buyerFit = account.possibleBuyerRoles.some((role) =>
@@ -57,11 +59,13 @@ export function scoreProspectAccount(
   const monsterRelevance = account.categories.some((category) => eligibleCategories.has(category))
     ? account.relevanceHypothesis.length >= 40 ? 20 : 15
     : 5;
-  const reachability = 0;
+  const hasContactRoute = contactRoutes.length > 0;
+  const hasContactPage = contactRoutes.some((route) => route.routeType === "CONTACT_PAGE");
+  const reachability = hasContactPage ? 15 : hasContactRoute ? 8 : 0;
   const evidence = source.status >= 200 && source.status < 300 && source.readableExcerpt.length > 40 ? 15 : 8;
   const uncappedTotal = buyerFit + timing + monsterRelevance + reachability + evidence;
-  const caps = ["NO_USABLE_PUBLIC_CONTACT_ROUTE"];
-  const total = Math.min(70, uncappedTotal);
+  const caps = hasContactRoute ? [] : ["NO_USABLE_PUBLIC_CONTACT_ROUTE"];
+  const total = hasContactRoute ? uncappedTotal : Math.min(70, uncappedTotal);
   const scoreState = total >= 80 ? "HOT" : total >= 55 ? "WARM" : total >= 30 ? "COLD" : "UNQUALIFIED";
 
   return ProspectScoreSchema.parse({

@@ -11,11 +11,11 @@
 
 - [Authoritative product plan](product/monster-scout-sales-prospecting-authoritative-plan.md) — the binding product and delivery plan.
 - [System overview](architecture/system-overview.md) — the application boundary and responsibility split.
-- [Architecture decisions](adr/) — accepted decisions that implementation must respect, including the [bounded extraction and verification boundary](adr/0009-bounded-account-extraction-and-signal-verification.md), [Prisma persistence boundary](adr/0010-prisma-mission-persistence-and-review-snapshots.md), [checkpoint/review/scoring boundary](adr/0011-checkpoint-review-and-scoring.md), [contact/first-move boundary](adr/0012-contact-routes-and-first-move-drafts.md), [approved export boundary](adr/0013-approved-lead-csv-dry-run.md), [CRM dry-run boundary](adr/0014-crm-dry-run-validation-boundary.md), and [governed knowledge ingestion](adr/0015-governed-knowledge-ingestion.md). The [proposed lexical MVP/hybrid target decision](adr/0016-lexical-mvp-adapter-hybrid-target.md) is not yet accepted.
+- [Architecture decisions](adr/) — accepted decisions that implementation must respect, including the [bounded extraction and verification boundary](adr/0009-bounded-account-extraction-and-signal-verification.md), [Prisma persistence boundary](adr/0010-prisma-mission-persistence-and-review-snapshots.md), [checkpoint/review/scoring boundary](adr/0011-checkpoint-review-and-scoring.md), [contact/first-move boundary](adr/0012-contact-routes-and-first-move-drafts.md), [approved export boundary](adr/0013-approved-lead-csv-dry-run.md), [CRM dry-run boundary](adr/0014-crm-dry-run-validation-boundary.md), [governed knowledge ingestion](adr/0015-governed-knowledge-ingestion.md), and [streamed progress and bounded continuation](adr/0017-streamed-search-progress-and-bounded-continuation.md). The [proposed lexical MVP/hybrid target decision](adr/0016-lexical-mvp-adapter-hybrid-target.md) is not yet accepted.
 
 ## Contracts and operational surfaces
 
-- [Mission discovery contract](contracts/mission-discovery.md) — bounded discovery, dossier, review, research-gap, resume and first-move routes.
+- [Mission discovery contract](contracts/mission-discovery.md) — bounded discovery, streamed progress, saved query history, dossier, review, research-gap, continuation, resume and first-move routes.
 - [Lead export contract](contracts/lead-export.md) — exact CSV boundary and field rules.
 - [Lead sheet schema](contracts/lead_sheet_schema.csv) — reconciled CSV header contract.
 - [Observability health route](../app/api/health/observability/route.ts) — LangSmith tracing configuration status without credentials.

@@ -13,7 +13,7 @@ Rules:
 - `company_name` is mandatory.
 - `website` is the canonical public website where known.
 - Unknown contact fields remain blank.
-- `email` is populated only when publicly confirmed.
+- `email` is populated only when publicly confirmed in fetched official-source evidence; it is never inferred.
 - `source_url` must support discovery or the buying signal.
 - `size/signals` contains concise verified commercial scale and timing signals.
 - `notes` contains the sales angle, gaps and next step.

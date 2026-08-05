@@ -27,6 +27,8 @@ export const ProductFocusSchema = z.enum([
   "UNDECIDED",
 ]);
 
+export const ContactRequirementSchema = z.enum(["ANY_ROUTE", "PUBLIC_EMAIL"]);
+
 const MissionLimitsSchema = z.object({
   maxSearches: z.number().int().min(1).max(100).default(12),
   maxPages: z.number().int().min(1).max(100).default(20),
@@ -41,6 +43,7 @@ export const SalesMissionBriefSchema = z.object({
   geographies: z.array(nonEmptyText).min(1).max(20),
   accountCategories: z.array(ProspectCategorySchema).min(1).max(8),
   productFocus: ProductFocusSchema.default("THE_MONSTER"),
+  contactRequirement: ContactRequirementSchema.default("ANY_ROUTE"),
   requiredSignals: boundedList.default(() => []),
   preferredSignals: boundedList.default(() => []),
   buyerRoles: boundedList.min(1).max(20),

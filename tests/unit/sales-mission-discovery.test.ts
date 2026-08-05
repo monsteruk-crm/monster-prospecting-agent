@@ -2,6 +2,7 @@ import { describe, expect, test, vi } from "vitest";
 
 import {
   discoverSalesMission,
+  isLikelyNonFirstPartySource,
   type PreparedSalesMissionForDiscovery,
 } from "@/lib/graph/sales-mission-discovery";
 import { prepareSalesMission } from "@/lib/graph/sales-mission-preparation";
@@ -69,12 +70,15 @@ async function preparedMission(
     maxSearches: number;
     maxPages: number;
   }>,
+  options: Partial<{ contactRequirement: "ANY_ROUTE" | "PUBLIC_EMAIL"; instructions: string }> = {},
 ): Promise<PreparedSalesMissionForDiscovery> {
   const prepared = await prepareSalesMission({
     name: "Discovery graph test",
     geographies: ["Germany"],
     accountCategories: ["TICKETED_EVENT_PROMOTER"],
     buyerRoles: ["Managing Director"],
+    contactRequirement: options.contactRequirement,
+    instructions: options.instructions,
     limits: {
       maxSearches: limits?.maxSearches ?? 2,
       maxPages: limits?.maxPages ?? 2,
@@ -93,6 +97,16 @@ async function preparedMission(
 }
 
 describe("sales mission discovery graph", () => {
+  test("filters known non-first-party search results before safe fetching", () => {
+    expect(isLikelyNonFirstPartySource("https://uk.trustpilot.com/categories/event_ticket_seller")).toBe(true);
+    expect(isLikelyNonFirstPartySource("https://uk.indeed.com/q-ticket-promoter-jobs.html")).toBe(true);
+    expect(isLikelyNonFirstPartySource("https://www.myfetetickets.com/")).toBe(true);
+    expect(isLikelyNonFirstPartySource("https://www.f6s.com/companies/tickets/united-kingdom/co")).toBe(true);
+    expect(isLikelyNonFirstPartySource("https://www.todaytix.com/london/category/all-experiences")).toBe(true);
+    expect(isLikelyNonFirstPartySource("https://secure.businesswire.com/news/home/20260225943147/en/example")).toBe(true);
+    expect(isLikelyNonFirstPartySource("https://example.org/events/programme")).toBe(false);
+  });
+
   test("runs the search provider before safe source fetching", async () => {
     const prepared = await preparedMission();
     const events: string[] = [];
@@ -146,6 +160,35 @@ describe("sales mission discovery graph", () => {
     });
   });
 
+  test("reports each executed query with cumulative bounded results", async () => {
+    const prepared = await preparedMission({ maxSearches: 1, maxPages: 1 });
+    const searchProgress = vi.fn();
+    const searchProvider = {
+      search: vi.fn(async (request) => [{
+        title: "Acme programme",
+        url: "https://acme.org/programme",
+        snippet: "A current official programme.",
+        providerRank: 1,
+        query: request.query,
+        discoveryTime: "2026-08-04T12:00:00.000Z",
+      }]),
+    };
+    await discoverSalesMission(prepared, {
+      searchProvider,
+      fetchSource: vi.fn(async ({ url }: { url: string }) => fetchedSource(url)),
+      ...extractionDependencies(),
+      onSearchProgress: searchProgress,
+    });
+
+    expect(searchProgress).toHaveBeenCalledWith(expect.objectContaining({
+      query: expect.any(String),
+      status: "COMPLETED",
+      resultCount: 1,
+      searchesUsed: 1,
+      searchResults: [expect.objectContaining({ url: "https://acme.org/programme" })],
+    }));
+  });
+
   test("keeps a partial result when one official source fetch fails", async () => {
     const prepared = await preparedMission();
     const fetchSource = vi.fn(async ({ url }: { url: string }) => {
@@ -186,6 +229,54 @@ describe("sales mission discovery graph", () => {
     });
     expect(state.discoveryStage).toBe("READY_FOR_REVIEW");
     expect(state.status).toBe("RUNNING");
+  });
+
+  test("filters extracted accounts when the brief requires a public email", async () => {
+    const prepared = await preparedMission({ maxSearches: 1, maxPages: 1 }, { instructions: "Return only contacts with an email" });
+    const searchProvider = {
+      search: vi.fn(async (request) => [{
+        title: "Official source",
+        url: "https://acme.org/contact",
+        snippet: "Contact details.",
+        providerRank: 1,
+        query: request.query,
+        discoveryTime: "2026-08-04T12:00:00.000Z",
+      }]),
+    };
+    const state = await discoverSalesMission(prepared, {
+      searchProvider,
+      fetchSource: vi.fn(async ({ url }: { url: string }) => fetchedSource(url, "Official programme evidence")),
+      ...extractionDependencies(),
+    });
+
+    expect(state.discoveredAccounts).toEqual([]);
+    expect(state.accountExtractionCandidates).toEqual([]);
+    expect(state.warnings).toContainEqual({
+      code: "ACCOUNT_FILTERED_NO_PUBLIC_EMAIL",
+      message: "Filtered 1 extracted account(s) because the brief requires a publicly confirmed email address.",
+    });
+  });
+
+  test("keeps a bounded email window when the public address is below the excerpt prefix", async () => {
+    const prepared = await preparedMission({ maxSearches: 1, maxPages: 1 }, { contactRequirement: "PUBLIC_EMAIL" });
+    const searchProvider = {
+      search: vi.fn(async (request) => [{
+        title: "Official contact page",
+        url: "https://acme.org/contact",
+        snippet: "Contact details.",
+        providerRank: 1,
+        query: request.query,
+        discoveryTime: "2026-08-04T12:00:00.000Z",
+      }]),
+    };
+    const state = await discoverSalesMission(prepared, {
+      searchProvider,
+      fetchSource: vi.fn(async ({ url }: { url: string }) => fetchedSource(url, `${"x".repeat(700)} Contact partnerships@example.org for enquiries.`)),
+      ...extractionDependencies(),
+    });
+
+    expect(state.discoveredAccounts).toHaveLength(1);
+    expect(state.accountExtractionCandidates[0].sourceExcerpt).toContain("partnerships@example.org");
   });
 
   test("derives freshness only from a source-supported event date", async () => {

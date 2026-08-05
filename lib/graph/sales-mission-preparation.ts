@@ -23,6 +23,7 @@ import {
   type SalesMissionBrief,
   type SalesMissionBriefInput,
 } from "@/lib/sales/mission-schema";
+import { requiresPublicEmail } from "@/lib/sales/contact-route-engine";
 
 export const SALES_MISSION_GRAPH_VERSION = "act-1-preparation-v1";
 
@@ -108,7 +109,7 @@ const buildSearchStrategy: GraphNode<SalesMissionGraphStateType> = (state) => {
     },
     {
       kind: "CONTACT_ROUTE_DISCOVERY" as const,
-      queries: [`${categories} partnerships contact ${geography}`],
+      queries: [`${categories} ${requiresPublicEmail(brief) ? "email contact" : "partnerships contact"} ${geography}`],
     },
     {
       kind: "COMPARABLE_ATTRACTION_DISCOVERY" as const,

@@ -39,10 +39,13 @@ import {
   type Budget,
   type AccountExtractionCandidate,
   type BuyingSignalCandidate,
+  type DiscoveredAccount,
   type FetchedSourceReference,
   type SalesMissionBrief,
+  type SearchResult,
   type SearchStrategy,
   type TargetProfile,
+  type VerifiedBuyingSignal,
 } from "@/lib/sales/mission-schema";
 import {
   SafeFetchResultSchema,
@@ -50,6 +53,13 @@ import {
   type SafeFetchInput,
   type SafeFetchResult,
 } from "@/lib/tools/safe-fetch";
+import { extractPublicEmail, requiresPublicEmail } from "@/lib/sales/contact-route-engine";
+import {
+  MissionProgressEventSchema,
+  MissionSearchProgressEventSchema,
+  type MissionProgressEvent,
+  type MissionSearchProgressEvent,
+} from "@/lib/sales/mission-progress";
 import type { PostgresSaver } from "@langchain/langgraph-checkpoint-postgres";
 import { getSalesMissionCheckpointer } from "@/lib/graph/checkpointer";
 
@@ -89,6 +99,7 @@ export type SalesMissionDiscoveryGraphStateType = typeof SalesMissionDiscoveryGr
 export type PreparedSalesMissionForDiscovery = {
   missionId: string;
   missionRunId: string;
+  graphVersion: string;
   brief: SalesMissionBrief;
   targetProfile: TargetProfile;
   searchStrategy: SearchStrategy;
@@ -98,6 +109,22 @@ export type PreparedSalesMissionForDiscovery = {
 };
 
 export type FetchSource = (input: SafeFetchInput) => Promise<SafeFetchResult>;
+export type MissionProgressReporter = (event: MissionProgressEvent) => Promise<void> | void;
+export type MissionSearchProgressReporter = (event: MissionSearchProgressEvent) => Promise<void> | void;
+
+export type DiscoveryStateSeed = {
+  searchResults?: SearchResult[];
+  fetchedSources?: FetchedSourceReference[];
+  accountExtractionCandidates?: AccountExtractionCandidate[];
+  discoveredAccounts?: DiscoveredAccount[];
+  accountIds?: string[];
+  buyingSignals?: VerifiedBuyingSignal[];
+  buyingSignalIds?: string[];
+  evidenceIds?: string[];
+  budget?: Budget;
+  warnings?: Array<z.infer<typeof GraphWarningSchema>>;
+  errors?: Array<z.infer<typeof GraphErrorSchema>>;
+};
 
 export interface SalesMissionDiscoveryDependencies {
   searchProvider?: SearchProvider;
@@ -106,6 +133,25 @@ export interface SalesMissionDiscoveryDependencies {
   verifySignals?: BuyingSignalVerifier;
   now?: () => Date;
   checkpointer?: PostgresSaver;
+  skipCheckpoint?: boolean;
+  onProgress?: MissionProgressReporter;
+  onSearchProgress?: MissionSearchProgressReporter;
+}
+
+async function reportProgress(
+  dependencies: SalesMissionDiscoveryDependencies,
+  event: MissionProgressEvent,
+): Promise<void> {
+  const parsed = MissionProgressEventSchema.parse(event);
+  await dependencies.onProgress?.(parsed);
+}
+
+async function reportSearchProgress(
+  dependencies: SalesMissionDiscoveryDependencies,
+  event: MissionSearchProgressEvent,
+): Promise<void> {
+  const parsed = MissionSearchProgressEventSchema.parse(event);
+  await dependencies.onSearchProgress?.(parsed);
 }
 
 function canonicaliseUrl(rawUrl: string): string | undefined {
@@ -148,6 +194,44 @@ function uniqueSearchResults(results: readonly z.infer<typeof SearchResultSchema
   });
 }
 
+const NON_FIRST_PARTY_HOST_MARKERS = [
+  "trustpilot.",
+  "indeed.",
+  "glassdoor.",
+  "myfetetickets.",
+  "attractiontix.",
+  "f6s.",
+  "todaytix.",
+  "businesswire.",
+  "prnewswire.",
+  "tripadvisor.",
+  "yelp.",
+  "eventbrite.",
+  "ticketmaster.",
+  "getyourguide.",
+  "facebook.",
+  "instagram.",
+  "linkedin.",
+];
+
+const NON_FIRST_PARTY_PATH_PATTERNS = [
+  /^\/(?:categories?|reviews?|jobs?|search)(?:\/|$)/,
+  /^\/q[-/]/,
+  /(?:^|\/)jobs?[-/]/,
+];
+
+export function isLikelyNonFirstPartySource(rawUrl: string): boolean {
+  try {
+    const url = new URL(rawUrl);
+    if (url.protocol !== "https:") return true;
+    const hostname = url.hostname.toLowerCase();
+    const pathname = url.pathname.toLowerCase();
+    return NON_FIRST_PARTY_HOST_MARKERS.some((marker) => hostname.includes(marker)) || NON_FIRST_PARTY_PATH_PATTERNS.some((pattern) => pattern.test(pathname));
+  } catch {
+    return true;
+  }
+}
+
 function canonicalAccountKey(companyName: string, sourceUrl: string): string {
   const hostname = new URL(sourceUrl).hostname.replace(/^www\./, "").toLowerCase();
   const normalizedName = companyName.toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
@@ -170,6 +254,27 @@ function sourceSupportsExcerpt(sourceExcerpt: string, evidenceExcerpt: string): 
 
 function sourceSupportsDate(sourceExcerpt: string, eventDate: string | null): boolean {
   return eventDate !== null && sourceExcerpt.includes(eventDate);
+}
+
+function boundedSourceExcerpt(readableText: string): string {
+  const normalized = readableText.trim();
+  if (normalized.length <= MAX_EXCERPT_LENGTH) {
+    return normalized;
+  }
+
+  const email = extractPublicEmail(normalized);
+  if (!email) {
+    return normalized.slice(0, MAX_EXCERPT_LENGTH);
+  }
+
+  const emailIndex = normalized.toLowerCase().indexOf(email);
+  if (emailIndex >= 0 && emailIndex + email.length <= MAX_EXCERPT_LENGTH) {
+    return normalized.slice(0, MAX_EXCERPT_LENGTH);
+  }
+
+  const contactWindow = normalized.slice(Math.max(0, emailIndex - 100), Math.min(normalized.length, emailIndex + email.length + 100));
+  const prefixLength = Math.max(0, MAX_EXCERPT_LENGTH - contactWindow.length - 5);
+  return `${normalized.slice(0, prefixLength)} … ${contactWindow}`.slice(0, MAX_EXCERPT_LENGTH);
 }
 
 function deriveFreshness(
@@ -229,12 +334,20 @@ function createSearchProviderNode(
     const pageBudgetRemaining = Math.max(0, state.budget.maxPages - state.budget.pagesUsed);
     const resultLimit = Math.min(
       MAX_SEARCH_RESULTS_PER_QUERY,
-      Math.max(1, pageBudgetRemaining),
+      Math.max(1, pageBudgetRemaining + state.searchResults.length),
     );
     const searchResults: Array<z.infer<typeof SearchResultSchema>> = [];
     const warnings: Array<z.infer<typeof GraphWarningSchema>> = [];
     const errors: Array<z.infer<typeof GraphErrorSchema>> = [];
     let searchesUsed = 0;
+
+    await reportProgress(dependencies, {
+      stage: "SEARCH_PROVIDER",
+      status: "RUNNING",
+      message: `Starting bounded search across ${queries.length} prepared queries.`,
+      detail: `Search budget: ${state.budget.maxSearches}; page budget: ${state.budget.maxPages}.`,
+      counts: { searches: 0, pages: state.budget.pagesUsed },
+    });
 
     if (pageBudgetRemaining === 0) {
       return {
@@ -252,7 +365,10 @@ function createSearchProviderNode(
       };
     }
 
-    for (const query of queries.slice(0, searchBudgetRemaining)) {
+    const queriesToRun = queries.slice(0, searchBudgetRemaining);
+    const knownUrls = new Set(state.searchResults.map((result) => canonicaliseUrl(result.url)).filter((url): url is string => Boolean(url)));
+    let accumulatedResults = [...state.searchResults];
+    for (const [queryIndex, query] of queriesToRun.entries()) {
       searchesUsed += 1;
       const request = SearchProviderRequestSchema.parse({
         query,
@@ -273,12 +389,50 @@ function createSearchProviderNode(
           });
           continue;
         }
-        searchResults.push(...parsedResults.data);
+        const newResults = uniqueSearchResults(parsedResults.data).filter((result) => {
+          const url = canonicaliseUrl(result.url);
+          if (!url || knownUrls.has(url)) return false;
+          knownUrls.add(url);
+          return true;
+        });
+        searchResults.push(...newResults);
+        accumulatedResults = [...accumulatedResults, ...newResults];
+        await reportSearchProgress(dependencies, {
+          query,
+          queryIndex: queryIndex + 1,
+          status: "COMPLETED",
+          resultCount: newResults.length,
+          searchesUsed,
+          searchResults: accumulatedResults,
+        });
+        await reportProgress(dependencies, {
+          stage: "SEARCH_PROVIDER",
+          status: "RUNNING",
+          message: `Search completed for query ${searchesUsed} of ${Math.min(queries.length, searchBudgetRemaining)}.`,
+          detail: query,
+          counts: { searches: searchesUsed, pages: state.budget.pagesUsed, sources: searchResults.length },
+        });
       } catch (error) {
         errors.push({
           code: "SEARCH_PROVIDER_ERROR",
           message: `Search provider failed for query "${query}": ${errorMessage(error)}`,
           retryable: true,
+        });
+        await reportSearchProgress(dependencies, {
+          query,
+          queryIndex: queryIndex + 1,
+          status: "FAILED",
+          resultCount: 0,
+          searchesUsed,
+          searchResults: accumulatedResults,
+          detail: errorMessage(error),
+        });
+        await reportProgress(dependencies, {
+          stage: "SEARCH_PROVIDER",
+          status: "RUNNING",
+          message: `Search query ${searchesUsed} failed; continuing with partial results.`,
+          detail: query,
+          counts: { searches: searchesUsed, pages: state.budget.pagesUsed, sources: searchResults.length },
         });
       }
     }
@@ -324,13 +478,32 @@ function createFetchOfficialSourcesNode(
     const evidenceIds: string[] = [];
     const errors: Array<z.infer<typeof GraphErrorSchema>> = [];
     const alreadyFetchedUrls = new Set(state.fetchedSources.map((source) => source.sourceUrl));
-    const candidates = state.searchResults
+    const sourceCandidates = state.searchResults
       .filter((candidate) => {
         const sourceUrl = canonicaliseUrl(candidate.url);
         return sourceUrl !== undefined && !alreadyFetchedUrls.has(sourceUrl);
-      })
+      });
+    const filteredCandidates = sourceCandidates.filter((candidate) => isLikelyNonFirstPartySource(candidate.url));
+    const candidates = sourceCandidates
+      .filter((candidate) => !isLikelyNonFirstPartySource(candidate.url))
       .slice(0, pageBudgetRemaining);
     let pagesUsed = 0;
+
+    await reportProgress(dependencies, {
+      stage: "OFFICIAL_SOURCE_FETCH",
+      status: "RUNNING",
+      message: `Fetching up to ${Math.min(sourceCandidates.length, pageBudgetRemaining)} first-party sources.`,
+      detail: "Non-first-party results are filtered before safe fetching.",
+      counts: { searches: state.budget.searchesUsed, pages: 0, sources: 0 },
+    });
+
+    if (filteredCandidates.length > 0) {
+      errors.push({
+        code: "SOURCE_CANDIDATE_FILTERED_NON_FIRST_PARTY",
+        message: `Skipped ${filteredCandidates.length} review, directory, job-board, ticket-reseller or non-first-party search result(s) before official-source fetching.`,
+        retryable: false,
+      });
+    }
 
     for (const candidate of candidates) {
       const sourceUrl = canonicaliseUrl(candidate.url);
@@ -353,7 +526,7 @@ function createFetchOfficialSourcesNode(
           status: parsedResult.status,
           mimeType: parsedResult.mimeType,
           title: parsedResult.title,
-          readableExcerpt: parsedResult.readableText.slice(0, MAX_EXCERPT_LENGTH),
+          readableExcerpt: boundedSourceExcerpt(parsedResult.readableText),
           byteCount: parsedResult.byteCount,
           contentHash: parsedResult.contentHash,
           retrievedAt: parsedResult.retrievedAt,
@@ -362,6 +535,13 @@ function createFetchOfficialSourcesNode(
         });
         fetchedSources.push(sourceReference);
         evidenceIds.push(`source:${parsedResult.contentHash}`);
+        await reportProgress(dependencies, {
+          stage: "OFFICIAL_SOURCE_FETCH",
+          status: "RUNNING",
+          message: `Fetched official source ${pagesUsed} of ${candidates.length}.`,
+          detail: sourceReference.finalUrl,
+          counts: { searches: state.budget.searchesUsed, pages: pagesUsed, sources: fetchedSources.length },
+        });
       } catch (error) {
         const code = errorCode(error);
         errors.push({
@@ -369,10 +549,17 @@ function createFetchOfficialSourcesNode(
           message: `Official-source fetch failed for ${sourceUrl}: ${errorMessage(error)}`,
           retryable: isRetryableFetchError(code),
         });
+        await reportProgress(dependencies, {
+          stage: "OFFICIAL_SOURCE_FETCH",
+          status: "RUNNING",
+          message: `Official source ${pagesUsed} failed; continuing with partial results.`,
+          detail: sourceUrl,
+          counts: { searches: state.budget.searchesUsed, pages: pagesUsed, sources: fetchedSources.length },
+        });
       }
     }
 
-    if (state.searchResults.length > pageBudgetRemaining) {
+    if (sourceCandidates.filter((candidate) => !isLikelyNonFirstPartySource(candidate.url)).length > pageBudgetRemaining) {
       errors.push({
         code: "SOURCE_PAGE_BUDGET_REACHED",
         message: `Official-source fetching stopped at the mission limit of ${state.budget.maxPages} pages.`,
@@ -417,7 +604,17 @@ function createExtractAccountsNode(
     const warnings: Array<z.infer<typeof GraphWarningSchema>> = [];
     const errors: Array<z.infer<typeof GraphErrorSchema>> = [];
     const existingAccountKeys = new Set(state.discoveredAccounts.map((account) => account.accountKey));
+    const emailRequired = requiresPublicEmail(state.brief);
+    let filteredNoPublicEmail = 0;
     let modelCallsUsed = 0;
+
+    await reportProgress(dependencies, {
+      stage: "ACCOUNT_EXTRACTION",
+      status: "RUNNING",
+      message: `Extracting accounts from ${candidates.length} fetched source(s).`,
+      detail: "Extraction output is schema-validated before persistence.",
+      counts: { searches: state.budget.searchesUsed, pages: state.budget.pagesUsed, sources: state.fetchedSources.length, accounts: 0 },
+    });
 
     if (sources.length > extractionCallLimit) {
       warnings.push({
@@ -445,6 +642,12 @@ function createExtractAccountsNode(
           sourceExcerpt: source.readableExcerpt,
           account,
         });
+
+        if (emailRequired && !extractPublicEmail(source.readableExcerpt)) {
+          filteredNoPublicEmail += 1;
+          continue;
+        }
+
         accountExtractionCandidates.push(candidate);
 
         if (!existingAccountKeys.has(candidate.accountKey)) {
@@ -452,13 +655,34 @@ function createExtractAccountsNode(
           accountIds.push(accountId(candidate.accountKey));
           existingAccountKeys.add(candidate.accountKey);
         }
+        await reportProgress(dependencies, {
+          stage: "ACCOUNT_EXTRACTION",
+          status: "RUNNING",
+          message: `Account extraction processed ${accountExtractionCandidates.length} qualifying source(s).`,
+          detail: candidate.account.companyName,
+          counts: { searches: state.budget.searchesUsed, pages: state.budget.pagesUsed, sources: state.fetchedSources.length, accounts: discoveredAccounts.length },
+        });
       } catch (error) {
         errors.push({
           code: `ACCOUNT_EXTRACTION_${errorCode(error)}`,
           message: `Account extraction failed for ${source.finalUrl}: ${errorMessage(error)}`,
           retryable: true,
         });
+        await reportProgress(dependencies, {
+          stage: "ACCOUNT_EXTRACTION",
+          status: "RUNNING",
+          message: "Account extraction failed for one source; continuing with partial results.",
+          detail: source.finalUrl,
+          counts: { searches: state.budget.searchesUsed, pages: state.budget.pagesUsed, sources: state.fetchedSources.length, accounts: discoveredAccounts.length },
+        });
       }
+    }
+
+    if (filteredNoPublicEmail > 0) {
+      warnings.push({
+        code: "ACCOUNT_FILTERED_NO_PUBLIC_EMAIL",
+        message: `Filtered ${filteredNoPublicEmail} extracted account(s) because the brief requires a publicly confirmed email address.`,
+      });
     }
 
     if (state.budget.maxModelCalls - state.budget.modelCallsUsed < 2 && sources.length > 0) {
@@ -552,6 +776,14 @@ function createVerifyBuyingSignalsNode(
     const existingSignalIds = new Set(state.buyingSignalIds);
     let modelCallsUsed = 0;
 
+    await reportProgress(dependencies, {
+      stage: "BUYING_SIGNAL_VERIFICATION",
+      status: "RUNNING",
+      message: `Verifying buying signals for ${accountsToVerify.length} account(s).`,
+      detail: "Unsupported claims remain explicitly unverified.",
+      counts: { searches: state.budget.searchesUsed, pages: state.budget.pagesUsed, sources: state.fetchedSources.length, accounts: state.discoveredAccounts.length, signals: 0 },
+    });
+
     if (candidatesByAccount.length > accountsToVerify.length) {
       warnings.push({
         code: "BUYING_SIGNAL_VERIFICATION_MODEL_BUDGET_REACHED",
@@ -620,7 +852,22 @@ function createVerifyBuyingSignalsNode(
         buyingSignalIds.push(verifiedSignal.signalId);
         existingSignalIds.add(verifiedSignal.signalId);
       }
+
+      await reportProgress(dependencies, {
+        stage: "BUYING_SIGNAL_VERIFICATION",
+        status: "RUNNING",
+        message: `Verified signals for ${accountCandidate.account.companyName}.`,
+        detail: `${signals.length} signal candidate(s) evaluated.`,
+        counts: { searches: state.budget.searchesUsed, pages: state.budget.pagesUsed, sources: state.fetchedSources.length, accounts: state.discoveredAccounts.length, signals: buyingSignals.length },
+      });
     }
+
+    await reportProgress(dependencies, {
+      stage: "READY_FOR_REVIEW",
+      status: "PAUSED_FOR_REVIEW",
+      message: `Discovery complete: ${state.discoveredAccounts.length} account(s) ready for review.`,
+      counts: { searches: state.budget.searchesUsed, pages: state.budget.pagesUsed, sources: state.fetchedSources.length, accounts: state.discoveredAccounts.length, signals: buyingSignals.length },
+    });
 
     return {
       buyingSignals,
@@ -639,6 +886,7 @@ function createVerifyBuyingSignalsNode(
 
 export function createInitialSalesMissionDiscoveryState(
   prepared: PreparedSalesMissionForDiscovery,
+  seed: DiscoveryStateSeed = {},
 ) {
   return {
     missionId: prepared.missionId,
@@ -647,17 +895,17 @@ export function createInitialSalesMissionDiscoveryState(
     brief: SalesMissionBriefSchema.parse(prepared.brief),
     targetProfile: TargetProfileSchema.parse(prepared.targetProfile),
     searchStrategy: SearchStrategySchema.parse(prepared.searchStrategy),
-    searchResults: [],
-    fetchedSources: [],
-    accountExtractionCandidates: [],
-    discoveredAccounts: [],
-    accountIds: [],
-    buyingSignals: [],
-    buyingSignalIds: [],
-    evidenceIds: [],
-    budget: BudgetSchema.parse(prepared.budget),
-    warnings: GraphWarningSchema.array().parse(prepared.warnings),
-    errors: GraphErrorSchema.array().parse(prepared.errors),
+    searchResults: SearchResultSchema.array().parse(seed.searchResults ?? []),
+    fetchedSources: FetchedSourceReferenceSchema.array().parse(seed.fetchedSources ?? []),
+    accountExtractionCandidates: AccountExtractionCandidateSchema.array().parse(seed.accountExtractionCandidates ?? []),
+    discoveredAccounts: DiscoveredAccountSchema.array().parse(seed.discoveredAccounts ?? []),
+    accountIds: z.array(z.string().min(1)).parse(seed.accountIds ?? []),
+    buyingSignals: VerifiedBuyingSignalSchema.array().parse(seed.buyingSignals ?? []),
+    buyingSignalIds: z.array(z.string().min(1)).parse(seed.buyingSignalIds ?? []),
+    evidenceIds: z.array(z.string().min(1)).parse(seed.evidenceIds ?? []),
+    budget: BudgetSchema.parse(seed.budget ?? prepared.budget),
+    warnings: GraphWarningSchema.array().parse(seed.warnings ?? prepared.warnings),
+    errors: GraphErrorSchema.array().parse(seed.errors ?? prepared.errors),
     status: "RUNNING" as const,
     discoveryStage: "SEARCH_PROVIDER" as const,
   };
@@ -685,9 +933,10 @@ export function createSalesMissionDiscoveryGraph(
 export async function discoverSalesMission(
   prepared: PreparedSalesMissionForDiscovery,
   dependencies: SalesMissionDiscoveryDependencies,
+  seed: DiscoveryStateSeed = {},
 ) {
-  const initialState = createInitialSalesMissionDiscoveryState(prepared);
-  const checkpointer = dependencies.checkpointer ?? (
+  const initialState = createInitialSalesMissionDiscoveryState(prepared, seed);
+  const checkpointer = dependencies.skipCheckpoint ? undefined : dependencies.checkpointer ?? (
     process.env.NODE_ENV === "test" ? undefined : await getSalesMissionCheckpointer()
   );
   const graph = createSalesMissionDiscoveryGraph({ ...dependencies, checkpointer });

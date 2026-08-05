@@ -8,6 +8,7 @@ export const ContactRouteSchema = z.object({
   targetRole: z.string().trim().min(1).max(200),
   contactName: z.string().trim().min(1).max(200).optional(),
   confirmedRole: z.string().trim().min(1).max(200).optional(),
+  email: z.string().email().optional(),
   contactPageUrl: z.string().url().optional(),
   professionalProfileUrl: z.string().url().optional(),
   sourceEvidenceIds: z.array(z.string().min(1)).max(10),

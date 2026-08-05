@@ -17,7 +17,7 @@ The persisted dossier contained accounts, evidence, signals, scores and review s
 
 ## Consequences
 
-Every account now has an explicit route state, including the valid `ROLE_ONLY` outcome. The current bounded discovery run does not crawl additional contact pages; broader contact-page search remains a follow-up. First-move generation is a human-reviewed sales aid, not an outreach integration.
+Every account now has an explicit route state, including the valid `ROLE_ONLY` outcome. A sourced role-only route is usable MVP reachability but does not imply a named person or direct contact method. The current bounded discovery run does not crawl additional contact pages; broader contact-page search remains a follow-up. First-move generation is a human-reviewed sales aid, not an outreach integration.
 
 ## Affected paths
 

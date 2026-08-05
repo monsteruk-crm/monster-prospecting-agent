@@ -63,9 +63,10 @@ export async function POST(request: Request) {
 
     const discovered = await discoverSalesMission(
       {
-        missionId: prepared.missionId,
-        missionRunId: prepared.missionRunId,
-        brief: prepared.brief,
+      missionId: prepared.missionId,
+      missionRunId: prepared.missionRunId,
+      graphVersion: prepared.graphVersion,
+      brief: prepared.brief,
         targetProfile: prepared.targetProfile,
         searchStrategy: prepared.searchStrategy,
         budget: prepared.budget,

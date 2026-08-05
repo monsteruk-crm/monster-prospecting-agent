@@ -130,6 +130,10 @@ export async function getMissionRunDossier(
       evidence: true,
       buyingSignals: true,
       review: true,
+      auditEvents: {
+        where: { eventType: { in: ["MISSION_PROGRESS", "MISSION_SEARCH_PROGRESS"] } },
+        orderBy: { occurredAt: "asc" },
+      },
     },
   });
 }
