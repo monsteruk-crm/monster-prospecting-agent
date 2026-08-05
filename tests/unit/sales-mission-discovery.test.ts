@@ -104,6 +104,11 @@ describe("sales mission discovery graph", () => {
     expect(isLikelyNonFirstPartySource("https://www.f6s.com/companies/tickets/united-kingdom/co")).toBe(true);
     expect(isLikelyNonFirstPartySource("https://www.todaytix.com/london/category/all-experiences")).toBe(true);
     expect(isLikelyNonFirstPartySource("https://secure.businesswire.com/news/home/20260225943147/en/example")).toBe(true);
+    expect(isLikelyNonFirstPartySource("https://www.britannica.com/topic/family-kinship")).toBe(true);
+    expect(isLikelyNonFirstPartySource("https://www.merriam-webster.com/dictionary/family")).toBe(true);
+    expect(isLikelyNonFirstPartySource("https://www.anydesk.com/en/downloads/windows")).toBe(true);
+    expect(isLikelyNonFirstPartySource("https://anydesk.en.softonic.com/")).toBe(true);
+    expect(isLikelyNonFirstPartySource("https://example.org/downloads/guide")).toBe(true);
     expect(isLikelyNonFirstPartySource("https://example.org/events/programme")).toBe(false);
   });
 

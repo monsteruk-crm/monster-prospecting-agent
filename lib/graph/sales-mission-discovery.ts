@@ -221,12 +221,29 @@ const NON_FIRST_PARTY_HOST_MARKERS = [
   "facebook.",
   "instagram.",
   "linkedin.",
+  "britannica.",
+  "merriam-webster.",
+  "dictionary.",
+  "wikipedia.",
+  "wiktionary.",
+  "cambridge.org",
+  "collinsdictionary.",
+  "wordreference.",
+  "familysearch.",
+  "simplicable.",
+  "anydesk.",
+  "softonic.",
+  "academia.",
+  "researchgate.",
+  "medium.",
 ];
 
 const NON_FIRST_PARTY_PATH_PATTERNS = [
   /^\/(?:categories?|reviews?|jobs?|search)(?:\/|$)/,
   /^\/q[-/]/,
   /(?:^|\/)jobs?[-/]/,
+  /\/(?:topic|dictionary|definition|thesaurus|download|downloads)(?:\/|$)/,
+  /(?:^|\/)(?:software|app|product)[-/]/,
 ];
 
 export function isLikelyNonFirstPartySource(rawUrl: string): boolean {
