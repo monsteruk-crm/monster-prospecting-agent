@@ -20,6 +20,7 @@ import {
 } from "@/lib/sales/mission-progress";
 import { SalesMissionBriefSchema, type SalesMissionBrief } from "@/lib/sales/mission-schema";
 import { logRuntimeWarning } from "@/lib/observability/runtime-logger";
+import { getEffectiveScoutSettings } from "@/lib/settings/settings-service";
 
 export type DiscoveryRunHooks = {
   onPrepared?: (prepared: PreparedSalesMissionForDiscovery) => Promise<void> | void;
@@ -46,6 +47,7 @@ export async function executeDiscoveryRun(
   hooks: DiscoveryRunHooks = {},
 ): Promise<DiscoveryRunResult> {
   const brief = SalesMissionBriefSchema.parse(rawBrief);
+  const effectiveSettings = await getEffectiveScoutSettings();
   const preparedState = await prepareSalesMission(brief);
   if (!preparedState.targetProfile || !preparedState.searchStrategy) {
     throw new Error("MISSION_PREPARATION_INCOMPLETE");
@@ -87,8 +89,10 @@ export async function executeDiscoveryRun(
       missionRunId: prepared.missionRunId,
       graphVersion: prepared.graphVersion,
       brief: prepared.brief,
-      targetProfile: prepared.targetProfile,
-      searchStrategy: prepared.searchStrategy,
+    targetProfile: prepared.targetProfile,
+    searchStrategy: prepared.searchStrategy,
+    settingsVersion: effectiveSettings.version,
+    settingsSnapshot: effectiveSettings.settings,
       budget: prepared.budget,
       warnings: prepared.warnings,
       errors: prepared.errors,
@@ -111,6 +115,8 @@ export async function executeDiscoveryRun(
     fetchedSources: discovered.fetchedSources,
     accounts: discovered.discoveredAccounts,
     buyingSignals: discovered.buyingSignals,
+    settingsVersion: effectiveSettings.version,
+    settingsSnapshot: effectiveSettings.settings,
   });
   if (discovered.errors.length > 0 || discovered.warnings.length > 0) {
     logRuntimeWarning("mission.discovery.partial", {

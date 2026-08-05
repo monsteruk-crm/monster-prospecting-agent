@@ -1,4 +1,4 @@
-import { SalesMissionBriefSchema } from "@/lib/sales/mission-schema";
+import { resolveMissionBrief } from "@/lib/settings/settings-service";
 import { executeDiscoveryRun } from "@/lib/graph/discovery-runner";
 import { DatabaseConfigurationError } from "@/lib/db/client";
 import { logRouteCompleted, logRouteFailure, logRouteStart, requestLogContext } from "@/lib/observability/runtime-logger";
@@ -21,13 +21,15 @@ export async function POST(request: Request) {
     return Response.json({ error: { code: "INVALID_JSON", message: "Request body must be valid JSON." } }, { status: 400 });
   }
 
-  const parsed = SalesMissionBriefSchema.safeParse(payload);
-  if (!parsed.success) {
+  let resolved: Awaited<ReturnType<typeof resolveMissionBrief>>;
+  try {
+    resolved = await resolveMissionBrief(payload);
+  } catch (error) {
     return Response.json({
       error: {
         code: "INVALID_SALES_MISSION_BRIEF",
         message: "The mission brief failed validation.",
-        issues: parsed.error.issues,
+        issues: error instanceof Error ? [{ message: error.message }] : undefined,
       },
     }, { status: 400 });
   }
@@ -47,7 +49,7 @@ export async function POST(request: Request) {
 
       void (async () => {
         try {
-          const result = await executeDiscoveryRun(parsed.data, {
+          const result = await executeDiscoveryRun(resolved.brief, {
             onPrepared: (prepared) => {
               send({
                 type: "run_started",

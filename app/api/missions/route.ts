@@ -1,4 +1,4 @@
-import { SalesMissionBriefSchema } from "@/lib/sales/mission-schema";
+import { resolveMissionBrief } from "@/lib/settings/settings-service";
 import { prepareSalesMission } from "@/lib/graph/sales-mission-preparation";
 import { DatabaseConfigurationError } from "@/lib/db/client";
 import { persistPreparedMission } from "@/lib/persistence/mission-persistence";
@@ -17,14 +17,16 @@ export async function POST(request: Request) {
     );
   }
 
-  const parsed = SalesMissionBriefSchema.safeParse(payload);
-  if (!parsed.success) {
+  let resolved: Awaited<ReturnType<typeof resolveMissionBrief>>;
+  try {
+    resolved = await resolveMissionBrief(payload);
+  } catch (error) {
     return Response.json(
       {
         error: {
           code: "INVALID_SALES_MISSION_BRIEF",
           message: "The sales mission brief failed validation.",
-          issues: parsed.error.issues,
+          issues: error instanceof Error ? [{ message: error.message }] : undefined,
         },
       },
       { status: 400 },
@@ -32,7 +34,7 @@ export async function POST(request: Request) {
   }
 
   try {
-    const state = await prepareSalesMission(parsed.data);
+    const state = await prepareSalesMission(resolved.brief);
     if (!state.targetProfile || !state.searchStrategy) {
       return Response.json(
         {
@@ -55,6 +57,8 @@ export async function POST(request: Request) {
       budget: state.budget,
       warnings: state.warnings,
       errors: state.errors,
+      settingsVersion: resolved.settingsVersion,
+      settingsSnapshot: resolved.settingsSnapshot,
     });
 
     return Response.json(

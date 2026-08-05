@@ -5,6 +5,7 @@ import {
   PublicPageLinkSchema,
   PublicPhoneHintSchema,
 } from "@/lib/tools/safe-fetch";
+import { ABSOLUTE_SCOUT_LIMITS } from "@/lib/settings/absolute-limits";
 
 const nonEmptyText = z.string().trim().min(1);
 const boundedList = z.array(nonEmptyText).max(20);
@@ -35,12 +36,12 @@ export const ProductFocusSchema = z.enum([
 
 export const ContactRequirementSchema = z.enum(["ANY_ROUTE", "PUBLIC_EMAIL"]);
 
-const MissionLimitsSchema = z.object({
-  maxSearches: z.number().int().min(1).max(100).default(12),
-  maxPages: z.number().int().min(1).max(100).default(20),
-  maxModelCalls: z.number().int().min(1).max(100).default(12),
-  maxCostUsd: z.number().min(0).max(100).default(2),
-  maxCandidateAccounts: z.number().int().min(1).max(5).default(5),
+export const MissionLimitsSchema = z.object({
+  maxSearches: z.number().int().min(1).max(ABSOLUTE_SCOUT_LIMITS.maxSearches).default(12),
+  maxPages: z.number().int().min(1).max(ABSOLUTE_SCOUT_LIMITS.maxPages).default(20),
+  maxModelCalls: z.number().int().min(1).max(ABSOLUTE_SCOUT_LIMITS.maxModelCalls).default(20),
+  maxCostUsd: z.number().min(0).max(ABSOLUTE_SCOUT_LIMITS.maxCostUsd).default(2),
+  maxCandidateAccounts: z.number().int().min(1).max(ABSOLUTE_SCOUT_LIMITS.maxCandidateAccounts).default(5),
 });
 
 export const SalesMissionBriefSchema = z.object({
@@ -69,7 +70,7 @@ export const TargetProfileSchema = z.object({
   targetBuyerRoles: z.array(nonEmptyText).min(1),
   commercialScaleIndicators: z.array(nonEmptyText).min(1),
   freshnessWindowDays: z.number().int().positive(),
-    maximumProspects: z.number().int().min(1).max(5),
+  maximumProspects: z.number().int().min(1).max(ABSOLUTE_SCOUT_LIMITS.maxCandidateAccounts),
 });
 
 export const QueryFamilyKindSchema = z.enum([
@@ -225,10 +226,10 @@ export const DiscoveryStageSchema = z.enum([
 ]);
 
 export const BudgetSchema = z.object({
-  maxSearches: z.number().int().positive(),
-  maxPages: z.number().int().positive(),
-  maxModelCalls: z.number().int().positive(),
-  maxCostUsd: z.number().nonnegative(),
+  maxSearches: z.number().int().positive().max(ABSOLUTE_SCOUT_LIMITS.maxSearches),
+  maxPages: z.number().int().positive().max(ABSOLUTE_SCOUT_LIMITS.maxPages),
+  maxModelCalls: z.number().int().positive().max(ABSOLUTE_SCOUT_LIMITS.maxModelCalls),
+  maxCostUsd: z.number().nonnegative().max(ABSOLUTE_SCOUT_LIMITS.maxCostUsd),
   searchesUsed: z.number().int().nonnegative(),
   pagesUsed: z.number().int().nonnegative(),
   modelCallsUsed: z.number().int().nonnegative(),

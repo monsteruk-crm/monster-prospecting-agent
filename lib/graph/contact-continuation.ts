@@ -8,6 +8,7 @@ import {
 import { getPrismaClient } from "@/lib/db/client";
 import { persistDiscoveryResult, persistMissionProgress, persistMissionSearchProgress } from "@/lib/persistence/mission-persistence";
 import { ContactRouteSchema } from "@/lib/sales/contact-schema";
+import { ABSOLUTE_SCOUT_LIMITS } from "@/lib/settings/absolute-limits";
 import { MissionProgressRecordSchema } from "@/lib/sales/mission-progress";
 import {
   AccountExtractionCandidateSchema,
@@ -33,9 +34,9 @@ export const ContactContinuationRequestSchema = z.object({
 function expandedBudget(previous: Budget, request: z.infer<typeof ContactContinuationRequestSchema>): Budget {
   return BudgetSchema.parse({
     ...previous,
-    maxSearches: Math.min(100, previous.maxSearches + request.additionalSearches),
-    maxPages: Math.min(100, previous.maxPages + request.additionalPages),
-    maxModelCalls: Math.min(100, previous.maxModelCalls + request.additionalModelCalls),
+    maxSearches: Math.min(ABSOLUTE_SCOUT_LIMITS.maxSearches, previous.maxSearches + request.additionalSearches),
+    maxPages: Math.min(ABSOLUTE_SCOUT_LIMITS.maxPages, previous.maxPages + request.additionalPages),
+    maxModelCalls: Math.min(ABSOLUTE_SCOUT_LIMITS.maxModelCalls, previous.maxModelCalls + request.additionalModelCalls),
   });
 }
 
@@ -69,6 +70,8 @@ export async function continueContactEnrichment(missionRunId: string, accountId:
     budget: expandedBudget(previousBudget, request),
     warnings: GraphWarningSchema.array().parse(run.warnings),
     errors: GraphErrorSchema.array().parse(run.errors),
+    settingsVersion: run.settingsVersion ?? undefined,
+    settingsSnapshot: run.settingsSnapshot ?? undefined,
   };
   const sources = run.evidence.map((source) => {
     const account = run.accounts.find((candidate) => candidate.id === source.accountId);
@@ -95,6 +98,6 @@ export async function continueContactEnrichment(missionRunId: string, accountId:
     onProgress: async (event) => { sequence += 1; const record = MissionProgressRecordSchema.parse({ ...event, sequence, occurredAt: new Date().toISOString() }); await persistMissionProgress({ missionId: run.missionId, missionRunId: run.id, sequence, event: record }); },
     onSearchProgress: async (event) => { await persistMissionSearchProgress({ missionId: run.missionId, missionRunId: run.id, event }); },
   }, seed);
-  const persisted = await persistDiscoveryResult({ missionId: discovered.missionId, missionRunId: discovered.missionRunId, graphVersion: discovered.graphVersion, brief: discovered.brief, targetProfile: discovered.targetProfile, searchStrategy: discovered.searchStrategy, budget: discovered.budget, warnings: discovered.warnings, errors: discovered.errors, status: discovered.status, discoveryStage: discovered.discoveryStage, searchResults: discovered.searchResults, fetchedSources: discovered.fetchedSources, accounts: discovered.discoveredAccounts, buyingSignals: discovered.buyingSignals });
+  const persisted = await persistDiscoveryResult({ missionId: discovered.missionId, missionRunId: discovered.missionRunId, graphVersion: discovered.graphVersion, brief: discovered.brief, targetProfile: discovered.targetProfile, searchStrategy: discovered.searchStrategy, budget: discovered.budget, warnings: discovered.warnings, errors: discovered.errors, status: discovered.status, discoveryStage: discovered.discoveryStage, searchResults: discovered.searchResults, fetchedSources: discovered.fetchedSources, accounts: discovered.discoveredAccounts, buyingSignals: discovered.buyingSignals, settingsVersion: run.settingsVersion ?? undefined, settingsSnapshot: run.settingsSnapshot ?? undefined });
   return { discovered, persisted, request, accountId: selected.id };
 }

@@ -1,7 +1,7 @@
 import { HumanMessage, SystemMessage } from "@langchain/core/messages";
-import { ChatOpenAI } from "@langchain/openai";
-
 import { getModelRegistry } from "@/lib/ai/model-registry";
+import { createConfiguredChatModel } from "@/lib/ai/model-factory";
+import { invokeWithUsage } from "@/lib/ai/usage-ledger";
 import { localLexicalMonsterKnowledgeRetriever, type MonsterKnowledgeRetriever } from "@/lib/knowledge/retriever";
 import { FirstMoveBriefSchema, type ContactRoute, type FirstMoveBrief } from "@/lib/sales/contact-schema";
 
@@ -33,8 +33,9 @@ export async function draftFirstMove(input: FirstMoveInput, options: FirstMoveOp
   const registry = getModelRegistry();
   const knowledgeRetriever = options.knowledgeRetriever ?? localLexicalMonsterKnowledgeRetriever;
   const monsterKnowledge = await knowledgeRetriever.retrieve({ query: `${input.productFocus} ${input.relevanceHypothesis}`, maxResults: 3, maxCharacters: 3600 });
-  const model = new ChatOpenAI({ apiKey: registry.gatewayCredential, model: registry.interpretation, temperature: 0, configuration: { baseURL: registry.gatewayBaseUrl } }).withStructuredOutput(FirstMoveBriefSchema, { name: "monster_scout_first_move", strict: true });
-  const result = await model.invoke([
+  const model = createConfiguredChatModel({ role: "interpretation", modelId: registry.interpretation, temperature: 0 }).withStructuredOutput(FirstMoveBriefSchema, { name: "monster_scout_first_move", strict: true });
+  const result = await invokeWithUsage({
+    invoke: () => model.invoke([
     new SystemMessage(systemPrompt),
     new HumanMessage(JSON.stringify({
       task: "Prepare one first-move brief for human review.",
@@ -54,6 +55,13 @@ export async function draftFirstMove(input: FirstMoveInput, options: FirstMoveOp
         excerpt: `<untrusted_monster_knowledge>\n${chunk.text}\n</untrusted_monster_knowledge>`,
       })),
     })),
-  ], { runName: "monster-scout-first-move-draft", tags: ["monster-scout", "act-1", "first-move"], metadata: { missionRunId: input.missionRunId, accountId: input.accountId } });
+    ], { runName: "monster-scout-first-move-draft", tags: ["monster-scout", "act-1", "first-move"], metadata: { missionRunId: input.missionRunId, accountId: input.accountId } }),
+    idempotencyKey: `${input.missionRunId}:first-move:${input.accountId}`,
+    missionRunId: input.missionRunId,
+    accountId: input.accountId,
+    operation: "FIRST_MOVE_DRAFT",
+    modelRole: "interpretation",
+    modelId: registry.interpretation,
+  });
   return FirstMoveBriefSchema.parse(result);
 }

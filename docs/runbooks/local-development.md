@@ -124,6 +124,8 @@ npx tsx -e 'import { duckDuckGoSearchProvider } from "./lib/discovery/duckduckgo
 
 It makes one bounded request to DuckDuckGo's HTML surface and should return at least one typed result. Do not use it as an automated high-volume crawler.
 
+For Prisma Postgres direct TCP credentials, use the provider URL with db.prisma.io:5432 and the root database path (/?sslmode=require). The project normalises a common /postgres path to / for this host. Prisma migrations require the direct TCP URL, not a pooled or Accelerate URL.
+
 ## Vercel and LangSmith
 
 For a Vercel deployment, link the project with the Vercel CLI or dashboard and pull the environment configuration into the local shell as appropriate. Vercel deployments may provide `VERCEL_OIDC_TOKEN`; otherwise use `AI_GATEWAY_API_KEY`. Configure LangSmith tracing variables only in the environment where tracing is intended. Check `GET /api/health/observability` before a live model call; the route reports configuration without exposing keys.

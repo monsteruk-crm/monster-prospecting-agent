@@ -49,6 +49,8 @@ model SalesMissionRun {
   buyingSignalIds Json
   warnings       Json
   errors         Json
+  settingsVersion Int?
+  settingsSnapshot Json?
   startedAt      DateTime            @default(now())
   completedAt    DateTime?
   mission        SalesMission         @relation(fields: [missionId], references: [id], onDelete: Cascade)
@@ -57,9 +59,70 @@ model SalesMissionRun {
   buyingSignals BuyingSignal[]
   review        MissionReview?
   auditEvents   MissionAuditEvent[]
+  aiUsageEvents AiUsageEvent[]
 
   @@index([missionId, startedAt])
   @@map("sales_mission_runs")
+}
+
+model ScoutSettings {
+  id            String   @id
+  schemaVersion Int
+  version       Int
+  settings      Json
+  updatedBy     String?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+  revisions     ScoutSettingsRevision[]
+
+  @@map("scout_settings")
+}
+
+model ScoutSettingsRevision {
+  id            String   @id
+  settingsId    String
+  version       Int
+  settings      Json
+  changedBy     String?
+  changeSummary String?
+  createdAt     DateTime @default(now())
+  parent        ScoutSettings @relation(fields: [settingsId], references: [id], onDelete: Cascade)
+
+  @@unique([settingsId, version])
+  @@map("scout_settings_revisions")
+}
+
+model AiUsageEvent {
+  id                 String   @id
+  idempotencyKey     String   @unique
+  missionId          String?
+  missionRunId       String?
+  accountId          String?
+  operation          String
+  modelRole          String
+  modelId            String
+  provider           String?
+  status             String
+  attemptNumber      Int      @default(1)
+  inputTokens        Int?
+  outputTokens       Int?
+  totalTokens        Int?
+  reportedCostUsd    Decimal? @db.Decimal(12, 6)
+  estimatedCostUsd   Decimal? @db.Decimal(12, 6)
+  costSource         String
+  latencyMs          Int?
+  traceId            String?
+  errorCode          String?
+  metadata           Json?
+  startedAt          DateTime
+  completedAt        DateTime?
+  createdAt          DateTime @default(now())
+  missionRun         SalesMissionRun? @relation(fields: [missionRunId], references: [id], onDelete: SetNull)
+
+  @@index([missionRunId, createdAt])
+  @@index([modelId, createdAt])
+  @@index([operation, createdAt])
+  @@map("ai_usage_events")
 }
 
 model ProspectAccount {

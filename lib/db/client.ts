@@ -29,7 +29,22 @@ export function getDatabaseConnectionString(): string {
     );
   }
 
-  return normaliseSslMode(connectionString);
+  return normalisePrismaPostgresUrl(normaliseSslMode(connectionString));
+}
+
+function normalisePrismaPostgresUrl(connectionString: string): string {
+  try {
+    const url = new URL(connectionString);
+    if (url.hostname === "db.prisma.io" && url.pathname === "/postgres") {
+      url.pathname = "/";
+    }
+    if (url.hostname === "db.prisma.io" && !url.searchParams.has("connect_timeout")) {
+      url.searchParams.set("connect_timeout", "30");
+    }
+    return url.toString();
+  } catch {
+    return connectionString;
+  }
 }
 
 function normaliseSslMode(connectionString: string): string {

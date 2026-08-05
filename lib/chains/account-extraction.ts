@@ -1,7 +1,7 @@
 import { HumanMessage, SystemMessage } from "@langchain/core/messages";
-import { ChatOpenAI } from "@langchain/openai";
-
 import { getModelRegistry } from "@/lib/ai/model-registry";
+import { createConfiguredChatModel } from "@/lib/ai/model-factory";
+import { invokeWithUsage } from "@/lib/ai/usage-ledger";
 import {
   AccountExtractionProposalSchema,
   BuyingSignalVerificationBatchSchema,
@@ -52,15 +52,7 @@ const verificationSystemPrompt = [
 ].join(" ");
 
 function createStructuredModel(modelName: string, outputSchema: typeof AccountExtractionProposalSchema | typeof BuyingSignalVerificationBatchSchema, outputName: string) {
-  const registry = getModelRegistry();
-  return new ChatOpenAI({
-    apiKey: registry.gatewayCredential,
-    model: modelName,
-    temperature: 0,
-    configuration: {
-      baseURL: registry.gatewayBaseUrl,
-    },
-  }).withStructuredOutput(outputSchema, {
+  return createConfiguredChatModel({ role: outputSchema === AccountExtractionProposalSchema ? "extraction" : "verification", modelId: modelName, temperature: 0 }).withStructuredOutput(outputSchema, {
     name: outputName,
     strict: true,
   });
@@ -78,8 +70,8 @@ export const extractAccountFromSource: AccountExtractor = async ({
     AccountExtractionProposalSchema,
     "monster_scout_account_extraction",
   );
-  const result = await model.invoke(
-    [
+  const result = await invokeWithUsage({
+    invoke: () => model.invoke([
       new SystemMessage(extractionSystemPrompt),
       new HumanMessage(
         JSON.stringify({
@@ -101,8 +93,7 @@ export const extractAccountFromSource: AccountExtractor = async ({
           },
         }),
       ),
-    ],
-    {
+    ], {
       runName: "monster-scout-extract-account",
       tags: ["monster-scout", "act-1", "account-extraction"],
       metadata: {
@@ -111,8 +102,13 @@ export const extractAccountFromSource: AccountExtractor = async ({
         missionRunId,
         sourceContentHash: source.contentHash,
       },
-    },
-  );
+    }),
+    idempotencyKey: `${missionRunId}:account-extraction:${source.contentHash}`,
+    missionRunId,
+    operation: "ACCOUNT_EXTRACTION",
+    modelRole: "extraction",
+    modelId: registry.extraction,
+  });
 
   return AccountExtractionProposalSchema.parse(result);
 };
@@ -130,8 +126,8 @@ export const verifyBuyingSignals: BuyingSignalVerifier = async ({
     BuyingSignalVerificationBatchSchema,
     "monster_scout_buying_signal_verification",
   );
-  const result = await model.invoke(
-    [
+  const result = await invokeWithUsage({
+    invoke: () => model.invoke([
       new SystemMessage(verificationSystemPrompt),
       new HumanMessage(
         JSON.stringify({
@@ -156,8 +152,7 @@ export const verifyBuyingSignals: BuyingSignalVerifier = async ({
           candidates: signals,
         }),
       ),
-    ],
-    {
+    ], {
       runName: "monster-scout-verify-buying-signals",
       tags: ["monster-scout", "act-1", "buying-signal-verification"],
       metadata: {
@@ -166,8 +161,13 @@ export const verifyBuyingSignals: BuyingSignalVerifier = async ({
         missionRunId,
         sourceContentHash: accountCandidate.sourceContentHash,
       },
-    },
-  );
+    }),
+    idempotencyKey: `${missionRunId}:signal-verification:${accountCandidate.sourceContentHash}`,
+    missionRunId,
+    operation: "BUYING_SIGNAL_VERIFICATION",
+    modelRole: "verification",
+    modelId: registry.verification,
+  });
 
   return BuyingSignalVerificationBatchSchema.parse(result);
 };

@@ -17,21 +17,21 @@ describe("sales mission brief schema", () => {
     expect(brief.freshnessWindowDays).toBe(365);
   });
 
-  test("permits the five-account MVP target but remains bounded", () => {
+  test("permits the configured target but remains absolutely bounded", () => {
     const brief = SalesMissionBriefSchema.parse({
       name: "Five-account hunt",
       geographies: ["Germany"],
       accountCategories: ["FESTIVAL_PRODUCER"],
       buyerRoles: ["Event Director"],
-      limits: { maxCandidateAccounts: 5 },
+      limits: { maxCandidateAccounts: 25 },
     });
-    expect(brief.limits.maxCandidateAccounts).toBe(5);
+    expect(brief.limits.maxCandidateAccounts).toBe(25);
     expect(() => SalesMissionBriefSchema.parse({
       name: "Over-sized hunt",
       geographies: ["Germany"],
       accountCategories: ["FESTIVAL_PRODUCER"],
       buyerRoles: ["Event Director"],
-      limits: { maxCandidateAccounts: 6 },
+      limits: { maxCandidateAccounts: 26 },
     })).toThrow();
   });
 });

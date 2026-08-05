@@ -51,6 +51,8 @@ export type PreparedMissionPersistenceInput = {
   budget: Budget;
   warnings: GraphWarning[];
   errors: GraphError[];
+  settingsVersion?: number;
+  settingsSnapshot?: unknown;
 };
 
 export type DiscoveryPersistenceInput = PreparedMissionPersistenceInput & {
@@ -174,6 +176,8 @@ function persistPreparedMissionRows(
         buyingSignalIds: asJson([]),
         warnings: asJson(input.warnings),
         errors: asJson(input.errors),
+        settingsVersion: input.settingsVersion,
+        settingsSnapshot: input.settingsSnapshot === undefined ? undefined : asJson(input.settingsSnapshot),
       },
       update: {
         graphVersion: input.graphVersion,
@@ -182,6 +186,8 @@ function persistPreparedMissionRows(
         budget: asJson(input.budget),
         warnings: asJson(input.warnings),
         errors: asJson(input.errors),
+        settingsVersion: input.settingsVersion,
+        settingsSnapshot: input.settingsSnapshot === undefined ? undefined : asJson(input.settingsSnapshot),
       },
     });
 
@@ -527,6 +533,8 @@ export async function persistDiscoveryResult(
         buyingSignalIds: asJson(buyingSignalIds),
         warnings: asJson(rawInput.warnings),
         errors: asJson(rawInput.errors),
+        settingsVersion: rawInput.settingsVersion,
+        settingsSnapshot: rawInput.settingsSnapshot === undefined ? undefined : asJson(rawInput.settingsSnapshot),
         completedAt: persistedAt,
       },
     });

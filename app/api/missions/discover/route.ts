@@ -1,4 +1,4 @@
-import { SalesMissionBriefSchema } from "@/lib/sales/mission-schema";
+import { resolveMissionBrief } from "@/lib/settings/settings-service";
 import { discoverSalesMission } from "@/lib/graph/sales-mission-discovery";
 import { prepareSalesMission } from "@/lib/graph/sales-mission-preparation";
 import { DatabaseConfigurationError } from "@/lib/db/client";
@@ -25,14 +25,16 @@ export async function POST(request: Request) {
     );
   }
 
-  const parsed = SalesMissionBriefSchema.safeParse(payload);
-  if (!parsed.success) {
+  let resolved: Awaited<ReturnType<typeof resolveMissionBrief>>;
+  try {
+    resolved = await resolveMissionBrief(payload);
+  } catch (error) {
     return Response.json(
       {
         error: {
           code: "INVALID_SALES_MISSION_BRIEF",
           message: "The sales mission brief failed validation.",
-          issues: parsed.error.issues,
+          issues: error instanceof Error ? [{ message: error.message }] : undefined,
         },
       },
       { status: 400 },
@@ -40,7 +42,7 @@ export async function POST(request: Request) {
   }
 
   try {
-    const prepared = await prepareSalesMission(parsed.data);
+    const prepared = await prepareSalesMission(resolved.brief);
     if (!prepared.targetProfile || !prepared.searchStrategy) {
       return Response.json(
         {
@@ -63,6 +65,8 @@ export async function POST(request: Request) {
       budget: prepared.budget,
       warnings: prepared.warnings,
       errors: prepared.errors,
+      settingsVersion: resolved.settingsVersion,
+      settingsSnapshot: resolved.settingsSnapshot,
     });
 
     const discovered = await discoverSalesMission(
@@ -89,6 +93,8 @@ export async function POST(request: Request) {
       budget: discovered.budget,
       warnings: discovered.warnings,
       errors: discovered.errors,
+      settingsVersion: resolved.settingsVersion,
+      settingsSnapshot: resolved.settingsSnapshot,
       status: discovered.status,
       discoveryStage: discovered.discoveryStage,
       searchResults: discovered.searchResults,

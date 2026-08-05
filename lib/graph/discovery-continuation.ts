@@ -25,6 +25,7 @@ import {
   type Budget,
 } from "@/lib/sales/mission-schema";
 import { z } from "zod";
+import { ABSOLUTE_SCOUT_LIMITS } from "@/lib/settings/absolute-limits";
 
 export const SearchContinuationRequestSchema = z.object({
   additionalSearches: z.number().int().min(1).max(20).default(7),
@@ -38,10 +39,10 @@ export type SearchContinuationRequest = z.infer<typeof SearchContinuationRequest
 function boundedBudget(previous: Budget, request: SearchContinuationRequest): Budget {
   return BudgetSchema.parse({
     ...previous,
-    maxSearches: Math.min(100, previous.maxSearches + request.additionalSearches),
-    maxPages: Math.min(100, previous.maxPages + request.additionalPages),
-    maxModelCalls: Math.min(100, previous.maxModelCalls + request.additionalModelCalls),
-    maxCostUsd: Math.min(100, previous.maxCostUsd + request.additionalCostUsd),
+    maxSearches: Math.min(ABSOLUTE_SCOUT_LIMITS.maxSearches, previous.maxSearches + request.additionalSearches),
+    maxPages: Math.min(ABSOLUTE_SCOUT_LIMITS.maxPages, previous.maxPages + request.additionalPages),
+    maxModelCalls: Math.min(ABSOLUTE_SCOUT_LIMITS.maxModelCalls, previous.maxModelCalls + request.additionalModelCalls),
+    maxCostUsd: Math.min(ABSOLUTE_SCOUT_LIMITS.maxCostUsd, previous.maxCostUsd + request.additionalCostUsd),
   });
 }
 
@@ -76,6 +77,8 @@ export async function continueDiscoveryRun(
     budget: boundedBudget(previousBudget, request),
     warnings: GraphWarningSchema.array().parse(run.warnings),
     errors: GraphErrorSchema.array().parse(run.errors),
+    settingsVersion: run.settingsVersion ?? undefined,
+    settingsSnapshot: run.settingsSnapshot ?? undefined,
   };
 
   const sources = run.evidence.map((source) => FetchedSourceReferenceSchema.parse({
@@ -198,6 +201,8 @@ export async function continueDiscoveryRun(
     fetchedSources: discovered.fetchedSources,
     accounts: discovered.discoveredAccounts,
     buyingSignals: discovered.buyingSignals,
+    settingsVersion: run.settingsVersion ?? undefined,
+    settingsSnapshot: run.settingsSnapshot ?? undefined,
   });
   return { discovered, persisted, request };
 }

@@ -113,6 +113,8 @@ export type PreparedSalesMissionForDiscovery = {
   budget: Budget;
   warnings: Array<z.infer<typeof GraphWarningSchema>>;
   errors: Array<z.infer<typeof GraphErrorSchema>>;
+  settingsVersion?: number;
+  settingsSnapshot?: unknown;
 };
 
 export type FetchSource = (input: SafeFetchInput) => Promise<SafeFetchResult>;

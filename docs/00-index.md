@@ -19,6 +19,7 @@
 - [Lead export contract](contracts/lead-export.md) — exact CSV boundary and field rules.
 - [Lead sheet schema](contracts/lead_sheet_schema.csv) — reconciled CSV header contract.
 - [Observability health route](../app/api/health/observability/route.ts) — LangSmith tracing configuration status without credentials.
+- [Settings and usage contract](contracts/settings-and-usage.md) — governed settings revisions, run snapshots, Vercel Gateway spend, usage ledger and cost semantics.
 
 ## Governed knowledge and evaluation
 

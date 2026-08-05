@@ -156,7 +156,7 @@ export function MissionControl() {
     try {
       setLaunchStatus("Searching DuckDuckGo, filtering candidates, and fetching first-party sources…");
       setLiveOutput([]);
-      const response = await fetch("/api/missions/discover/stream", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ name: missionName, owner, geographies: commaList(geography), accountCategories: [accountCategory], productFocus, contactRequirement, requiredSignals: commaList(requiredSignals), preferredSignals: commaList(preferredSignals), buyerRoles: commaList(buyerRole), freshnessWindowDays: Number.parseInt(freshnessWindowDays, 10), exclusions: commaList(exclusions), instructions, limits: { maxCandidateAccounts: 5, maxSearches: 12, maxPages: 20, maxModelCalls: 20, maxCostUsd: 2 } }) });
+      const response = await fetch("/api/missions/discover/stream", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ name: missionName, owner, geographies: commaList(geography), accountCategories: [accountCategory], productFocus, contactRequirement, requiredSignals: commaList(requiredSignals), preferredSignals: commaList(preferredSignals), buyerRoles: commaList(buyerRole), freshnessWindowDays: Number.parseInt(freshnessWindowDays, 10), exclusions: commaList(exclusions), instructions }) });
       if (!response.ok) { const payload = await response.json() as LaunchResponse & { error?: { message?: string } }; throw new Error(payload.error?.message ?? "The mission could not be launched."); }
       let completedRunId = "";
       await readNdjson(response, (message) => {
