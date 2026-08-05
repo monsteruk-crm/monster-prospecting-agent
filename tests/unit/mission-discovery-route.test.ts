@@ -3,10 +3,13 @@ import { beforeEach, describe, expect, test, vi } from "vitest";
 const graphMocks = vi.hoisted(() => ({
   prepareSalesMission: vi.fn(),
   discoverSalesMission: vi.fn(),
+  persistPreparedMission: vi.fn(),
+  persistDiscoveryResult: vi.fn(),
 }));
 
 vi.mock("@/lib/graph/sales-mission-preparation", () => graphMocks);
 vi.mock("@/lib/graph/sales-mission-discovery", () => graphMocks);
+vi.mock("@/lib/persistence/mission-persistence", () => graphMocks);
 
 import { POST } from "@/app/api/missions/discover/route";
 
@@ -57,6 +60,21 @@ const discovered = {
   evidenceIds: [],
 };
 
+const persisted = {
+  missionId: "mission-route",
+  missionRunId: "run-route",
+  persistedAt: "2026-08-05T00:00:00.000Z",
+  accountIds: [],
+  evidenceIds: [],
+  buyingSignalIds: [],
+  review: {
+    id: "review:run-route",
+    status: "PENDING",
+    snapshot: {},
+    decision: null,
+  },
+};
+
 function jsonRequest(body: unknown): Request {
   return new Request("http://localhost/api/missions/discover", {
     method: "POST",
@@ -69,6 +87,8 @@ describe("POST /api/missions/discover", () => {
   beforeEach(() => {
     graphMocks.prepareSalesMission.mockReset().mockResolvedValue(prepared);
     graphMocks.discoverSalesMission.mockReset().mockResolvedValue(discovered);
+    graphMocks.persistPreparedMission.mockReset().mockResolvedValue(undefined);
+    graphMocks.persistDiscoveryResult.mockReset().mockResolvedValue(persisted);
   });
 
   test("validates the brief and invokes preparation followed by discovery", async () => {
@@ -82,12 +102,15 @@ describe("POST /api/missions/discover", () => {
       expect.objectContaining({ missionId: "mission-route", missionRunId: "run-route" }),
       {},
     );
+    expect(graphMocks.persistPreparedMission).toHaveBeenCalledTimes(1);
+    expect(graphMocks.persistDiscoveryResult).toHaveBeenCalledTimes(1);
     expect(body).toMatchObject({
       missionId: "mission-route",
       discoveryStage: "READY_FOR_REVIEW",
       fetchedSources: [],
       accounts: [],
       buyingSignals: [],
+      review: { id: "review:run-route", status: "PENDING" },
     });
   });
 

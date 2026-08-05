@@ -14,12 +14,13 @@ Add `POST /api/missions/discover` as a Node.js App Router route. It:
 - validates the request as a `SalesMissionBrief`;
 - creates a fresh mission and LangGraph thread ID through the preparation graph;
 - invokes `discoverSalesMission` with the default DuckDuckGo provider and `safe_fetchTool`;
-- returns bounded search metadata, source references, excerpts, hashes, budgets, warnings and typed errors;
+- persists the prepared mission/run and final bounded account, evidence, signal, audit and pending-review records through Prisma;
+- returns bounded search metadata, source references, excerpts, hashes, budgets, review state, warnings and typed errors;
 - returns `cache-control: no-store`;
 - returns partial discovery results with HTTP `201` when individual provider or source calls fail;
 - returns `502` only for an unexpected route-level failure.
 
-The route does not persist business entities, expose a resume endpoint, accept arbitrary source URLs or send outreach. Durable checkpoints, authentication and human review remain later milestones.
+The route does not expose a resume endpoint, accept arbitrary source URLs, mutate review decisions, authenticate users or send outreach. Durable LangGraph checkpoints, authentication and human review actions remain later milestones.
 
 ## Alternatives considered
 
@@ -29,9 +30,8 @@ The route does not persist business entities, expose a resume endpoint, accept a
 
 ## Consequences
 
-The MVP has a concrete server boundary for a fresh bounded discovery run and a stable response contract for the UI. The route can still be slow or rate-limited by DuckDuckGo, and it does not yet support durable resume, authentication or persistent mission history.
+The MVP has a concrete server boundary for a fresh bounded discovery run and a stable response contract for the UI. Mission history and pending review snapshots are durable, while the route can still be slow or rate-limited by DuckDuckGo and does not yet support durable graph resume, authentication or review-decision mutation.
 
 ## Affected paths
 
 `app/api/missions/discover/route.ts`, `docs/contracts/mission-discovery.md`, `tests/unit/mission-discovery-route.test.ts`, `docs/architecture/system-overview.md`, `docs/runbooks/local-development.md`, `docs/STATUS.md`
-

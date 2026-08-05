@@ -25,6 +25,8 @@ npm run prisma:generate
 npm run prisma:migrate
 ```
 
+The bounded mission routes now require this PostgreSQL connection for durable mission, evidence, signal and pending-review persistence. The migration creates the `sales_missions`, `sales_mission_runs`, `prospect_accounts`, `mission_evidence`, `buying_signals`, `mission_reviews` and `mission_audit_events` tables.
+
 The application health check is `GET /api/health/db`. It returns `503` with a typed configuration/blocker response until a database is configured and reachable.
 
 ## Local commands
@@ -52,7 +54,7 @@ curl --request POST http://localhost:3000/api/missions/discover \
   --data '{"name":"DACH promoter hunt","geographies":["Germany"],"accountCategories":["TICKETED_EVENT_PROMOTER"],"buyerRoles":["Managing Director"]}'
 ```
 
-The route starts a fresh bounded run, performs live DuckDuckGo and source fetch requests, extracts accounts from short source excerpts, verifies buying-signal candidates, returns `201` with partial results/errors, and does not persist or resume a mission yet. The response includes source-linked `accounts[]` and `buyingSignals[]`; a signal with no supported excerpt or no verification remains explicitly unverified with `MISSING_INFORMATION` and/or `UNKNOWN` freshness.
+The route starts a fresh bounded run, persists the prepared mission, performs live DuckDuckGo and source fetch requests, extracts accounts from short source excerpts, verifies buying-signal candidates, persists the resulting entities and a `PENDING` review snapshot, then returns `201` with partial results/errors. The response includes source-linked `accounts[]`, `buyingSignals[]` and `review`; a signal with no supported excerpt or no verification remains explicitly unverified with `MISSING_INFORMATION` and/or `UNKNOWN` freshness. It does not resume a graph or mutate review decisions yet.
 
 The controlled DuckDuckGo smoke check is:
 

@@ -7,11 +7,175 @@ generator client {
   output   = "./generated"
 }
 
-// Act 0 connectivity marker only. Business entities arrive in later acts.
 model BootstrapHealthCheck {
   id        String   @id @default(cuid())
   status    String
   createdAt DateTime @default(now())
 
   @@map("bootstrap_health_checks")
+}
+
+model SalesMission {
+  id            String              @id
+  name          String
+  owner         String
+  productFocus  String
+  status        String
+  brief         Json
+  createdAt     DateTime            @default(now())
+  updatedAt     DateTime            @updatedAt
+  runs          SalesMissionRun[]
+  accounts      ProspectAccount[]
+  evidence      MissionEvidence[]
+  buyingSignals BuyingSignal[]
+  reviews       MissionReview[]
+  auditEvents   MissionAuditEvent[]
+
+  @@map("sales_missions")
+}
+
+model SalesMissionRun {
+  id             String              @id
+  missionId      String
+  graphVersion   String
+  status         String
+  discoveryStage String
+  targetProfile  Json
+  searchStrategy Json
+  budget         Json
+  searchResults  Json
+  evidenceIds    Json
+  accountIds     Json
+  buyingSignalIds Json
+  warnings       Json
+  errors         Json
+  startedAt      DateTime            @default(now())
+  completedAt    DateTime?
+  mission        SalesMission         @relation(fields: [missionId], references: [id], onDelete: Cascade)
+  accounts      ProspectAccount[]
+  evidence      MissionEvidence[]
+  buyingSignals BuyingSignal[]
+  review        MissionReview?
+  auditEvents   MissionAuditEvent[]
+
+  @@index([missionId, startedAt])
+  @@map("sales_mission_runs")
+}
+
+model ProspectAccount {
+  id                   String              @id
+  missionId            String
+  missionRunId         String
+  accountKey           String
+  companyName          String
+  officialDomain       String?
+  website              String?
+  country              String?
+  city                 String?
+  categories           Json
+  relevanceHypothesis  String
+  discoveredSignals    Json
+  possibleBuyerRoles   Json
+  discoveryEvidenceIds Json
+  unresolvedQuestions  Json
+  createdAt            DateTime            @default(now())
+  updatedAt            DateTime            @updatedAt
+  mission              SalesMission         @relation(fields: [missionId], references: [id], onDelete: Cascade)
+  run                  SalesMissionRun      @relation(fields: [missionRunId], references: [id], onDelete: Cascade)
+  evidence             MissionEvidence[]
+  buyingSignals        BuyingSignal[]
+
+  @@unique([missionId, accountKey])
+  @@index([missionRunId])
+  @@map("prospect_accounts")
+}
+
+model MissionEvidence {
+  id              String           @id
+  missionId       String
+  missionRunId    String
+  accountId       String?
+  sourceUrl       String
+  finalUrl        String
+  status          Int
+  mimeType        String
+  title           String?
+  readableExcerpt String
+  byteCount       Int
+  contentHash     String
+  retrievedAt     DateTime
+  redirectCount   Int
+  searchQuery     String
+  createdAt       DateTime         @default(now())
+  mission         SalesMission     @relation(fields: [missionId], references: [id], onDelete: Cascade)
+  run             SalesMissionRun  @relation(fields: [missionRunId], references: [id], onDelete: Cascade)
+  account         ProspectAccount? @relation(fields: [accountId], references: [id], onDelete: SetNull)
+  buyingSignals   BuyingSignal[]
+
+  @@unique([missionRunId, contentHash])
+  @@index([missionId, contentHash])
+  @@map("mission_evidence")
+}
+
+model BuyingSignal {
+  id                  String           @id
+  missionId           String
+  missionRunId        String
+  accountId           String
+  evidenceId          String
+  signalKey           String
+  signalType          String
+  summary             String
+  eventDate           DateTime?
+  freshness           String
+  evidenceState       String
+  verified            Boolean
+  confidence          Float
+  verificationReason  String
+  evidenceExcerpt     String
+  sourceContentHash   String
+  createdAt           DateTime         @default(now())
+  updatedAt           DateTime         @updatedAt
+  mission             SalesMission     @relation(fields: [missionId], references: [id], onDelete: Cascade)
+  run                 SalesMissionRun  @relation(fields: [missionRunId], references: [id], onDelete: Cascade)
+  account             ProspectAccount  @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  evidence            MissionEvidence  @relation(fields: [evidenceId], references: [id], onDelete: Cascade)
+
+  @@unique([missionRunId, signalKey])
+  @@index([accountId, verified, freshness])
+  @@map("buying_signals")
+}
+
+model MissionReview {
+  id          String           @id
+  missionId   String
+  missionRunId String          @unique
+  status      String
+  snapshot    Json
+  decision    Json?
+  reviewer    String?
+  createdAt   DateTime         @default(now())
+  updatedAt   DateTime         @updatedAt
+  decidedAt   DateTime?
+  mission     SalesMission     @relation(fields: [missionId], references: [id], onDelete: Cascade)
+  run         SalesMissionRun  @relation(fields: [missionRunId], references: [id], onDelete: Cascade)
+
+  @@index([missionId, status])
+  @@map("mission_reviews")
+}
+
+model MissionAuditEvent {
+  idempotencyKey String          @unique
+  id             String          @id
+  missionId      String
+  missionRunId   String
+  eventType      String
+  payload        Json
+  occurredAt     DateTime        @default(now())
+  mission        SalesMission    @relation(fields: [missionId], references: [id], onDelete: Cascade)
+  run            SalesMissionRun @relation(fields: [missionRunId], references: [id], onDelete: Cascade)
+
+  @@index([missionId, occurredAt])
+  @@index([missionRunId, occurredAt])
+  @@map("mission_audit_events")
 }

@@ -1,6 +1,11 @@
 import { SalesMissionBriefSchema } from "@/lib/sales/mission-schema";
 import { discoverSalesMission } from "@/lib/graph/sales-mission-discovery";
 import { prepareSalesMission } from "@/lib/graph/sales-mission-preparation";
+import { DatabaseConfigurationError } from "@/lib/db/client";
+import {
+  persistDiscoveryResult,
+  persistPreparedMission,
+} from "@/lib/persistence/mission-persistence";
 
 export const runtime = "nodejs";
 
@@ -44,6 +49,18 @@ export async function POST(request: Request) {
       );
     }
 
+    await persistPreparedMission({
+      missionId: prepared.missionId,
+      missionRunId: prepared.missionRunId,
+      graphVersion: prepared.graphVersion,
+      brief: prepared.brief,
+      targetProfile: prepared.targetProfile,
+      searchStrategy: prepared.searchStrategy,
+      budget: prepared.budget,
+      warnings: prepared.warnings,
+      errors: prepared.errors,
+    });
+
     const discovered = await discoverSalesMission(
       {
         missionId: prepared.missionId,
@@ -57,6 +74,23 @@ export async function POST(request: Request) {
       },
       {},
     );
+    const persisted = await persistDiscoveryResult({
+      missionId: discovered.missionId,
+      missionRunId: discovered.missionRunId,
+      graphVersion: discovered.graphVersion,
+      brief: discovered.brief,
+      targetProfile: discovered.targetProfile,
+      searchStrategy: discovered.searchStrategy,
+      budget: discovered.budget,
+      warnings: discovered.warnings,
+      errors: discovered.errors,
+      status: discovered.status,
+      discoveryStage: discovered.discoveryStage,
+      searchResults: discovered.searchResults,
+      fetchedSources: discovered.fetchedSources,
+      accounts: discovered.discoveredAccounts,
+      buyingSignals: discovered.buyingSignals,
+    });
 
     return Response.json(
       {
@@ -75,6 +109,8 @@ export async function POST(request: Request) {
         accountIds: discovered.accountIds,
         buyingSignals: discovered.buyingSignals,
         buyingSignalIds: discovered.buyingSignalIds,
+        review: persisted.review,
+        persistedAt: persisted.persistedAt,
         evidenceIds: discovered.evidenceIds,
         warnings: discovered.warnings,
         errors: discovered.errors,
@@ -84,15 +120,26 @@ export async function POST(request: Request) {
         headers: { "cache-control": "no-store" },
       },
     );
-  } catch {
+  } catch (error) {
+    if (error instanceof DatabaseConfigurationError) {
+      return Response.json(
+        {
+          error: {
+            code: "MISSION_PERSISTENCE_FAILED",
+            message: "A database is required to persist the discovery run.",
+          },
+        },
+        { status: 503 },
+      );
+    }
     return Response.json(
       {
         error: {
-          code: "MISSION_DISCOVERY_FAILED",
-          message: "The bounded discovery run could not be completed.",
+          code: "MISSION_DISCOVERY_OR_PERSISTENCE_FAILED",
+          message: "The bounded discovery run could not be completed and persisted.",
         },
       },
-      { status: 502 },
+      { status: 503 },
     );
   }
 }

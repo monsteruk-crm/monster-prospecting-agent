@@ -141,22 +141,24 @@ const IsoDateSchema = z.string().regex(/^\d{4}-\d{2}-\d{2}$/);
 
 export const AccountBuyingSignalExtractionSchema = z.object({
   signalType: BuyingSignalTypeSchema,
-  summary: nonEmptyText.max(600),
+  summary: z.string().trim().min(1).max(600),
   eventDate: IsoDateSchema.nullable(),
   evidenceExcerpt: z.string().trim().max(500),
 });
 
 export const AccountExtractionProposalSchema = z.object({
-  companyName: nonEmptyText.max(200),
-  officialDomain: z.string().url().nullable(),
-  website: z.string().url().nullable(),
+  companyName: z.string().trim().min(1).max(200),
+  // These are model-generated hints. The graph never trusts them for provenance;
+  // source URLs are validated separately and derived from the fetched reference.
+  officialDomain: z.string().trim().max(2048).nullable(),
+  website: z.string().trim().max(2048).nullable(),
   country: z.string().trim().min(2).max(100).nullable(),
   city: z.string().trim().min(1).max(100).nullable(),
   categories: z.array(ProspectCategorySchema).min(1).max(8),
-  relevanceHypothesis: nonEmptyText.max(1000),
-  possibleBuyerRoles: boundedList,
+  relevanceHypothesis: z.string().trim().min(1).max(1000),
+  possibleBuyerRoles: z.array(z.string().trim().min(1).max(200)).max(20),
   buyingSignals: z.array(AccountBuyingSignalExtractionSchema).max(10),
-  unresolvedQuestions: boundedList,
+  unresolvedQuestions: z.array(z.string().trim().min(1).max(500)).max(20),
 });
 
 export const AccountExtractionCandidateSchema = z.object({
@@ -182,11 +184,11 @@ export const BuyingSignalCandidateSchema = z.object({
 });
 
 export const BuyingSignalVerificationProposalSchema = z.object({
-  candidateId: nonEmptyText.max(400),
+  candidateId: z.string().trim().min(1).max(400),
   verified: z.boolean(),
   evidenceState: EvidenceStateSchema,
   confidence: z.number().min(0).max(1),
-  reason: nonEmptyText.max(600),
+  reason: z.string().trim().min(1).max(600),
   eventDate: IsoDateSchema.nullable(),
   evidenceExcerpt: z.string().trim().max(500),
 });

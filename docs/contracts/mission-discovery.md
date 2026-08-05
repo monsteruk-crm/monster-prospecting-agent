@@ -37,6 +37,8 @@ accounts[]
 accountIds[]
 buyingSignals[]
 buyingSignalIds[]
+review
+persistedAt
 evidenceIds[]
 warnings[]
 errors[]
@@ -48,6 +50,8 @@ errors[]
 
 The graph stages are `SEARCH_PROVIDER`, `OFFICIAL_SOURCE_FETCH`, `ACCOUNT_EXTRACTION`, `BUYING_SIGNAL_VERIFICATION` and `READY_FOR_REVIEW`. Account extraction and verification consume the shared `maxModelCalls` budget; extraction reserves calls so verification can run when the budget allows. Partial model failures remain in `errors[]` and do not discard successful accounts or signals.
 
+The route persists the mission, run, account entities, source evidence, buying signals, audit event and a `PENDING` review snapshot in PostgreSQL before returning. The review snapshot stores IDs, budget, warnings and errors rather than full page bodies. Repeated writes for the same mission/run use stable keys and Prisma upserts.
+
 The route returns `201` for a completed bounded run even when individual search or source requests fail; those failures are represented in `errors[]` and successful results remain available. `cache-control: no-store` is set because the response contains mission research.
 
 ## Error responses
@@ -55,6 +59,7 @@ The route returns `201` for a completed bounded run even when individual search 
 - `400 INVALID_JSON` — malformed JSON body;
 - `400 INVALID_SALES_MISSION_BRIEF` — the body fails the sales-mission schema;
 - `500 MISSION_PREPARATION_INCOMPLETE` — preparation did not produce discovery inputs;
-- `502 MISSION_DISCOVERY_FAILED` — an unexpected server-side discovery failure.
+- `503 MISSION_PERSISTENCE_FAILED` — the database is unavailable or the mission could not be persisted;
+- `503 MISSION_DISCOVERY_OR_PERSISTENCE_FAILED` — an unexpected discovery or final persistence failure.
 
-The route does not persist missions or provide resume/checkpoint semantics yet. It is intentionally a bounded server route, not a public proxy for arbitrary URLs and not an outreach endpoint.
+The route does not provide resume/checkpoint semantics, authentication, review-decision mutation or CRM writes yet. It is intentionally a bounded server route, not a public proxy for arbitrary URLs and not an outreach endpoint.

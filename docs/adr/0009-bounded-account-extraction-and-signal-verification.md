@@ -22,6 +22,8 @@ Deterministic TypeScript remains authoritative for:
 - `verified` status, evidence state and freshness calculation;
 - partial failure handling and duplicate signal IDs.
 
+Model-facing response schemas use provider-compatible bounded primitives for strict structured output. Model-provided domains are treated as hints only; source URLs and provenance always come from the validated fetched reference.
+
 Signals that cannot be supported remain present only as explicitly unverified or unknown outcomes. The graph stores short excerpts and structured references, never full page bodies. The route exposes bounded account candidates, accounts and signal outcomes for audit-oriented UI work, but it does not persist entities, send outreach or make CRM decisions.
 
 ## Alternatives considered
