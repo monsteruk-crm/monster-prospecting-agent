@@ -72,6 +72,8 @@ export async function POST(request: Request) {
             discoveryStage: result.discovered.discoveryStage,
             accountCount: result.discovered.discoveredAccounts.length,
             signalCount: result.discovered.buyingSignals.length,
+            errorCodes: result.discovered.errors.map((error) => error.code),
+            warningCodes: result.discovered.warnings.map((warning) => warning.code),
           });
         } catch (error) {
           logRouteFailure(logContext, startedAt, error);
@@ -83,7 +85,7 @@ export async function POST(request: Request) {
                 ? "A database is required to persist the discovery run."
                 : error instanceof Error && error.message === "MISSION_PREPARATION_INCOMPLETE"
                   ? "The mission preparation graph did not produce discovery inputs."
-                  : "The bounded discovery run could not be completed and persisted.",
+                  : error instanceof Error ? error.message : "The bounded discovery run could not be completed and persisted.",
               requestId: logContext.requestId,
             },
           });

@@ -63,6 +63,7 @@ import {
 import type { PostgresSaver } from "@langchain/langgraph-checkpoint-postgres";
 import { getSalesMissionCheckpointer } from "@/lib/graph/checkpointer";
 import { getDomain } from "tldts";
+import { logRuntimeError } from "@/lib/observability/runtime-logger";
 
 export const SALES_MISSION_DISCOVERY_GRAPH_VERSION = "act-1-discovery-v1";
 const MAX_SEARCH_RESULTS_PER_QUERY = 100;
@@ -431,6 +432,12 @@ function createSearchProviderNode(
           counts: { searches: searchesUsed, pages: state.budget.pagesUsed, sources: searchResults.length },
         });
       } catch (error) {
+        logRuntimeError("mission.discovery.search_provider_failed", {
+          missionRunId: state.missionRunId,
+          query,
+          error,
+          searchesUsed,
+        });
         errors.push({
           code: "SEARCH_PROVIDER_ERROR",
           message: `Search provider failed for query "${query}": ${errorMessage(error)}`,
@@ -974,6 +981,13 @@ function createContactEnrichmentNode(
             candidateUrls.push(...officialResults.map((result) => result.url));
             await reportSearchProgress(dependencies, { query, queryIndex: state.searchResults.length + contactSearchesUsed, status: "COMPLETED", resultCount: officialResults.length, searchesUsed: state.budget.searchesUsed + contactSearchesUsed, searchResults: uniqueSearchResults([...state.searchResults, ...contactSearchResults]).slice(0, 1000) });
           } catch (error) {
+            logRuntimeError("mission.discovery.contact_search_failed", {
+              missionRunId: state.missionRunId,
+              accountKey: account.accountKey,
+              query,
+              error,
+              searchesUsed: state.budget.searchesUsed + contactSearchesUsed,
+            });
             errors.push({ code: "CONTACT_SEARCH_FAILED", message: `Focused contact search failed for ${account.companyName}: ${errorMessage(error)}`, retryable: true });
             await reportSearchProgress(dependencies, { query, queryIndex: state.searchResults.length + contactSearchesUsed, status: "FAILED", resultCount: 0, searchesUsed: state.budget.searchesUsed + contactSearchesUsed, searchResults: uniqueSearchResults([...state.searchResults, ...contactSearchResults]).slice(0, 1000), detail: errorMessage(error) });
           }

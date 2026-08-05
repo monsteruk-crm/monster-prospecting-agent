@@ -61,3 +61,7 @@ export function logRouteFailure(context: Record<string, unknown>, startedAt: num
 export function logRuntimeWarning(event: string, fields: Record<string, unknown> = {}) {
   write("warn", event, fields);
 }
+
+export function logRuntimeError(event: string, fields: Record<string, unknown> = {}) {
+  write("error", event, fields);
+}

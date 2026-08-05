@@ -115,7 +115,9 @@ export async function executeDiscoveryRun(
   if (discovered.errors.length > 0 || discovered.warnings.length > 0) {
     logRuntimeWarning("mission.discovery.partial", {
       missionRunId: discovered.missionRunId,
+      errorMessages: discovered.errors.map((error) => error.message).slice(0, 20),
       errorCodes: discovered.errors.map((error) => error.code).slice(0, 20),
+      warningMessages: discovered.warnings.map((warning) => warning.message).slice(0, 20),
       warningCodes: discovered.warnings.map((warning) => warning.code).slice(0, 20),
       searchesUsed: discovered.budget.searchesUsed,
       pagesUsed: discovered.budget.pagesUsed,

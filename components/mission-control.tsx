@@ -168,11 +168,16 @@ export function MissionControl() {
           setLiveOutput((current) => [...current, { kind: "stage" as const, message: String(message.message ?? "Progress update"), detail: typeof message.detail === "string" ? message.detail : undefined, occurredAt: typeof message.occurredAt === "string" ? message.occurredAt : undefined, counts: typeof message.counts === "object" && message.counts !== null ? message.counts as Record<string, number> : undefined }].slice(-40));
           setLaunchStatus(String(message.message ?? "Mission running…"));
         } else if (message.type === "search_progress") {
-          setLiveOutput((current) => [...current, { kind: "search" as const, message: `Search ${String(message.status ?? "updated").toLowerCase()}: ${String(message.resultCount ?? 0)} new result(s).`, detail: typeof message.query === "string" ? message.query : undefined }].slice(-40));
-          setLaunchStatus(`Search ${String(message.queryIndex ?? "")} complete · ${String(message.resultCount ?? 0)} new result(s).`);
+          const status = String(message.status ?? "updated").toUpperCase();
+          const detail = typeof message.detail === "string" ? message.detail : undefined;
+          setLiveOutput((current) => [...current, { kind: "search" as const, message: `Search ${status.toLowerCase()}: ${String(message.resultCount ?? 0)} new result(s).`, detail: detail ?? (typeof message.query === "string" ? message.query : undefined) }].slice(-40));
+          setLaunchStatus(status === "FAILED"
+            ? `Search failed: ${detail ?? "provider returned an error"}`
+            : `Search ${String(message.queryIndex ?? "")} complete · ${String(message.resultCount ?? 0)} new result(s).`);
         } else if (message.type === "error") {
-          const error = message.error as { message?: string } | undefined;
-          throw new Error(error?.message ?? "The mission could not be completed.");
+          const error = message.error as { code?: string; message?: string; requestId?: string } | undefined;
+          const diagnostic = [error?.code, error?.message, error?.requestId ? `request ${error.requestId}` : undefined].filter(Boolean).join(": ");
+          throw new Error(diagnostic || "The mission could not be completed.");
         }
         if (message.type === "completed" && typeof message.missionRunId === "string") completedRunId = message.missionRunId;
       });
