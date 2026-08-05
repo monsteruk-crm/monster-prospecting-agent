@@ -1,11 +1,11 @@
 # ADR 0010: Prisma mission persistence and review snapshots
 
-Status: accepted  
+Status: superseded in part by ADR 0011
 Date: 2026-08-05
 
 ## Context
 
-The bounded discovery route previously returned useful research but discarded it after the HTTP response. The product plan requires missions, runs, accounts, evidence, signals, reviews and audits to be business entities with idempotent side effects. LangGraph checkpoint/resume and human review interrupts are not yet enabled in the current package set.
+The bounded discovery route previously returned useful research but discarded it after the HTTP response. The product plan requires missions, runs, accounts, evidence, signals, reviews and audits to be business entities with idempotent side effects. The persistence decisions in this ADR remain active; checkpoint, resume and review-action details are superseded by ADR 0011.
 
 ## Decision
 

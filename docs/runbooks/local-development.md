@@ -16,6 +16,8 @@ cp .env.example .env
 
 Fill `DATABASE_URL` with a pooled runtime URL and `DIRECT_URL` with a direct migration URL. This repository also accepts `PRISMA_DATABASE_URL` or `POSTGRES_URL` when those are the names supplied by your database provider. Fill the AI Gateway credential and all four model-role variables. Do not commit `.env`, `.env.example` secrets, or real credentials.
 
+For the temporary CRM dry-run service boundary, configure `CRM_DRY_RUN_SERVICE_TOKEN` (a local secret of at least 16 characters), `CRM_DRY_RUN_ORGANIZATION_ID`, and optionally `CRM_DRY_RUN_SERVICE_ROLE=CRM_OPERATOR` or `ADMIN`. Send the token as `Authorization: Bearer ...` and the organisation as `x-monster-organization-id`; never place the token in source, documentation or logs.
+
 ## Database setup status
 
 Prisma is configured for PostgreSQL with a minimal `BootstrapHealthCheck` model. The runtime uses Prisma's PostgreSQL adapter, which supports Prisma Postgres, Neon and standard PostgreSQL URLs. The current local Prisma Postgres migration has been applied. For a fresh environment, run:
@@ -25,7 +27,7 @@ npm run prisma:generate
 npm run prisma:migrate
 ```
 
-The bounded mission routes now require this PostgreSQL connection for durable mission, evidence, signal and pending-review persistence. The migration creates the `sales_missions`, `sales_mission_runs`, `prospect_accounts`, `mission_evidence`, `buying_signals`, `mission_reviews` and `mission_audit_events` tables.
+The bounded mission routes now require this PostgreSQL connection for durable mission, evidence, signal and pending-review persistence. The migrations create the mission business tables; the LangGraph checkpointer creates its checkpoint tables on first use.
 
 The application health check is `GET /api/health/db`. It returns `503` with a typed configuration/blocker response until a database is configured and reachable.
 
@@ -38,7 +40,20 @@ npm run typecheck
 npm test
 DIRECT_URL="postgresql://bootstrap:bootstrap@localhost:5432/monster_scout" npm run build
 npm run test:e2e
+npm run knowledge:ingest
 ```
+
+## Governed knowledge ingestion
+
+The restored checklist and positioning addendum are ingested locally into checked-in artifacts:
+
+```bash
+npm run knowledge:ingest
+cat knowledge/ingested/manifest.json
+wc -l knowledge/ingested/chunks.jsonl
+```
+
+The command is deterministic. It normalizes line endings, records `AUTHORITATIVE_CHECKLIST` or `POSITIONING_ADDENDUM`, sets the source effective date and active deprecation state, and writes source/chunk SHA-256 hashes plus Markdown section IDs. Review the manifest and source diff whenever either source changes. The artifacts are provenance metadata and bounded context, not a live CRM feed or a vector database.
 
 The home screen's smoke-test control calls `POST /api/smoke`. It remains blocked until the AI Gateway credential and central model registry variables are configured. It is not a prospecting endpoint.
 
@@ -54,7 +69,31 @@ curl --request POST http://localhost:3000/api/missions/discover \
   --data '{"name":"DACH promoter hunt","geographies":["Germany"],"accountCategories":["TICKETED_EVENT_PROMOTER"],"buyerRoles":["Managing Director"]}'
 ```
 
-The route starts a fresh bounded run, persists the prepared mission, performs live DuckDuckGo and source fetch requests, extracts accounts from short source excerpts, verifies buying-signal candidates, persists the resulting entities and a `PENDING` review snapshot, then returns `201` with partial results/errors. The response includes source-linked `accounts[]`, `buyingSignals[]` and `review`; a signal with no supported excerpt or no verification remains explicitly unverified with `MISSING_INFORMATION` and/or `UNKNOWN` freshness. It does not resume a graph or mutate review decisions yet.
+The route starts a fresh bounded run, persists the prepared mission, performs live DuckDuckGo and source fetch requests, extracts accounts from short source excerpts, verifies buying-signal candidates, persists scored entities and a `PENDING` review snapshot, then returns `201` with partial results/errors. The response includes source-linked `accounts[]`, `buyingSignals[]` and `review`; a signal with no supported excerpt or no verification remains explicitly unverified with `MISSING_INFORMATION` and/or `UNKNOWN` freshness. The graph is checkpointed after verification.
+
+Use `GET /api/runs/:missionRunId` to load the dossier. Record a review with `POST /api/runs/:missionRunId/review` and `{ "action": "APPROVE", "reviewer": "Nick" }`; approval, rejection, duplicate and do-not-contact decisions resume the checkpointed thread, while `EDIT` leaves the run in `CHANGES_REQUESTED`. `POST /api/runs/:missionRunId/resume` is available for explicit operational recovery.
+
+After approval, use `POST /api/prospects/:accountId/first-move` to generate one persisted `DRAFT` first-move brief. The route never sends it. Role-only contact routes are valid when no public contact page is supported by evidence; guessed email addresses are never created.
+
+For the approved CSV dry-run, call:
+
+```bash
+curl --request POST http://localhost:3000/api/exports/leads \
+  --header 'content-type: application/json' \
+  --data '{"missionRunId":"...","mode":"DRY_RUN"}'
+```
+
+The response is the governed lead-sheet CSV and is available only for an `APPROVED` mission. It does not write to Monster CRM; unknown contact fields and `last_touch` remain blank.
+
+Validate approved records against a manually supplied CRM snapshot without writing to CRM. The request must include the configured bearer token and organisation header:
+
+```bash
+curl --request POST http://localhost:3000/api/crm/dry-run \
+  --header 'content-type: application/json' \
+  --header 'authorization: Bearer $CRM_DRY_RUN_SERVICE_TOKEN' \
+  --header 'x-monster-organization-id: monster-scout' \
+  --data '{"missionRunId":"...","idempotencyKey":"local-check","existingCompanyNames":[],"optedOutAccountIds":[]}'
+```
 
 The controlled DuckDuckGo smoke check is:
 
@@ -73,4 +112,4 @@ For a Vercel deployment, link the project with the Vercel CLI or dashboard and p
 - `npm run prisma:migrate` is blocked until one of `DIRECT_URL`, `PRISMA_DATABASE_URL`, `POSTGRES_URL`, or `DATABASE_URL` points at a real PostgreSQL database.
 - `GET /api/health/db` is blocked until one of those variables points at a reachable database.
 - `POST /api/smoke` is blocked until a gateway credential and four approved model IDs are present.
-- The lead export contract cannot be finally verified until the supplied CSV source is restored.
+- The CRM dry-run route uses a temporary bearer-token service boundary; SSO, token rotation, organisation-level RBAC and live insertion are still required before production CRM use. Live CRM insertion remains an explicitly deferred TODO.

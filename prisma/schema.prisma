@@ -78,6 +78,9 @@ model ProspectAccount {
   possibleBuyerRoles   Json
   discoveryEvidenceIds Json
   unresolvedQuestions  Json
+  score                Json?
+  contactRoutes        Json
+  firstMoveDraft       Json?
   createdAt            DateTime            @default(now())
   updatedAt            DateTime            @updatedAt
   mission              SalesMission         @relation(fields: [missionId], references: [id], onDelete: Cascade)

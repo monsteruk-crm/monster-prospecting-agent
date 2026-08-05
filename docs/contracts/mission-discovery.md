@@ -62,4 +62,14 @@ The route returns `201` for a completed bounded run even when individual search 
 - `503 MISSION_PERSISTENCE_FAILED` — the database is unavailable or the mission could not be persisted;
 - `503 MISSION_DISCOVERY_OR_PERSISTENCE_FAILED` — an unexpected discovery or final persistence failure.
 
-The route does not provide resume/checkpoint semantics, authentication, review-decision mutation or CRM writes yet. It is intentionally a bounded server route, not a public proxy for arbitrary URLs and not an outreach endpoint.
+The discovery route uses the LangGraph Postgres checkpointer and interrupts after the bounded verification stage. The run is resumable with its `missionRunId`/`thread_id`. It remains intentionally a bounded server route, not a public proxy for arbitrary URLs and not an outreach endpoint.
+
+## Review and dossier routes
+
+- `GET /api/runs/:missionRunId` returns the persisted mission, run, account dossiers, score snapshots, contact routes, evidence, signals, first-move drafts and review state.
+- `POST /api/runs/:missionRunId/review` accepts `{ action, reviewer, note }`, where `action` is `APPROVE`, `REJECT`, `EDIT`, `DUPLICATE` or `DO_NOT_CONTACT`. Decisions are audited. Non-edit decisions resume the checkpointed graph and complete the run.
+- `POST /api/runs/:missionRunId/resume` resumes a checkpointed run explicitly.
+
+Scores are deterministic snapshots. Accounts without a usable public contact route are capped at 70, and the dossier exposes the cap rather than implying contactability.
+
+After approval, `POST /api/prospects/:accountId/first-move` generates and persists a `DRAFT` first-move brief. It requires `MissionReview.status = APPROVED`, uses only supplied evidence and routes, and never sends outreach.

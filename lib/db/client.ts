@@ -15,7 +15,7 @@ const globalForPrisma = globalThis as unknown as {
   prisma?: PrismaClient;
 };
 
-export function getPrismaClient(): PrismaClient {
+export function getDatabaseConnectionString(): string {
   const connectionString = (
     process.env.DATABASE_URL ??
     process.env.POSTGRES_URL ??
@@ -28,6 +28,12 @@ export function getPrismaClient(): PrismaClient {
       "No database URL is configured. Set DATABASE_URL, POSTGRES_URL, PRISMA_DATABASE_URL, or DIRECT_URL before using the database.",
     );
   }
+
+  return connectionString;
+}
+
+export function getPrismaClient(): PrismaClient {
+  const connectionString = getDatabaseConnectionString();
 
   if (!globalForPrisma.prisma) {
     const adapter = new PrismaPg({ connectionString });

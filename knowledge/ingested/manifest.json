@@ -1,0 +1,23 @@
+{
+  "schemaVersion": 1,
+  "chunkingStrategy": "markdown-sections-v1",
+  "sources": [
+    {
+      "sourcePath": "knowledge/authoritative/full-checklist.md",
+      "authority": "AUTHORITATIVE_CHECKLIST",
+      "effectiveDate": "2026-06-29",
+      "deprecationState": "ACTIVE",
+      "sourceHash": "c38cd2136b613caa167071acb16ad4de5c589c0018dcaf708feb5583a70d5de1",
+      "chunkCount": 14
+    },
+    {
+      "sourcePath": "knowledge/positioning/product-decks-rag-addendum.md",
+      "authority": "POSITIONING_ADDENDUM",
+      "effectiveDate": "2026-06-29",
+      "deprecationState": "ACTIVE",
+      "sourceHash": "020e38dfe8a88556d8e4c1506866e328053248dc4f4de65db9cc9bc9cb8304c3",
+      "chunkCount": 27
+    }
+  ],
+  "chunks": 41
+}

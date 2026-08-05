@@ -50,6 +50,8 @@ import {
   type SafeFetchInput,
   type SafeFetchResult,
 } from "@/lib/tools/safe-fetch";
+import type { PostgresSaver } from "@langchain/langgraph-checkpoint-postgres";
+import { getSalesMissionCheckpointer } from "@/lib/graph/checkpointer";
 
 export const SALES_MISSION_DISCOVERY_GRAPH_VERSION = "act-1-discovery-v1";
 const MAX_SEARCH_RESULTS_PER_QUERY = 100;
@@ -103,6 +105,7 @@ export interface SalesMissionDiscoveryDependencies {
   extractAccount?: AccountExtractor;
   verifySignals?: BuyingSignalVerifier;
   now?: () => Date;
+  checkpointer?: PostgresSaver;
 }
 
 function canonicaliseUrl(rawUrl: string): string | undefined {
@@ -663,7 +666,7 @@ export function createInitialSalesMissionDiscoveryState(
 export function createSalesMissionDiscoveryGraph(
   dependencies: SalesMissionDiscoveryDependencies,
 ) {
-  return new StateGraph(SalesMissionDiscoveryGraphState)
+  const graph = new StateGraph(SalesMissionDiscoveryGraphState)
     .addNode("search_provider", createSearchProviderNode(dependencies))
     .addNode("fetch_official_sources", createFetchOfficialSourcesNode(dependencies))
     .addNode("extract_accounts", createExtractAccountsNode(dependencies))
@@ -672,8 +675,11 @@ export function createSalesMissionDiscoveryGraph(
     .addEdge("search_provider", "fetch_official_sources")
     .addEdge("fetch_official_sources", "extract_accounts")
     .addEdge("extract_accounts", "verify_buying_signals")
-    .addEdge("verify_buying_signals", END)
-    .compile();
+    .addEdge("verify_buying_signals", END);
+
+  return dependencies.checkpointer
+    ? graph.compile({ checkpointer: dependencies.checkpointer, interruptAfter: ["verify_buying_signals"] })
+    : graph.compile();
 }
 
 export async function discoverSalesMission(
@@ -681,7 +687,10 @@ export async function discoverSalesMission(
   dependencies: SalesMissionDiscoveryDependencies,
 ) {
   const initialState = createInitialSalesMissionDiscoveryState(prepared);
-  const graph = createSalesMissionDiscoveryGraph(dependencies);
+  const checkpointer = dependencies.checkpointer ?? (
+    process.env.NODE_ENV === "test" ? undefined : await getSalesMissionCheckpointer()
+  );
+  const graph = createSalesMissionDiscoveryGraph({ ...dependencies, checkpointer });
   return graph.invoke(initialState, {
     configurable: { thread_id: initialState.missionRunId },
     runName: "monster-scout-discover-official-sources",
@@ -691,5 +700,17 @@ export async function discoverSalesMission(
       milestone: "act-1",
       graphVersion: SALES_MISSION_DISCOVERY_GRAPH_VERSION,
     },
+  });
+}
+
+export async function resumeSalesMission(
+  missionRunId: string,
+  checkpointer: PostgresSaver,
+) {
+  const graph = createSalesMissionDiscoveryGraph({ checkpointer });
+  return graph.invoke(null as never, {
+    configurable: { thread_id: missionRunId },
+    runName: "monster-scout-resume-review-run",
+    tags: ["monster-scout", "act-1", "resume"],
   });
 }

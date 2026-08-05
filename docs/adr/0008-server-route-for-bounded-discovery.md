@@ -1,6 +1,6 @@
 # ADR 0008: Server route for bounded discovery
 
-Status: accepted  
+Status: superseded in part by ADR 0011
 Date: 2026-08-04
 
 ## Context

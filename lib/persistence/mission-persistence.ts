@@ -23,6 +23,8 @@ import {
   type TargetProfile,
   type VerifiedBuyingSignal,
 } from "@/lib/sales/mission-schema";
+import { scoreProspectAccount } from "@/lib/sales/score-engine";
+import { deriveContactRoutes } from "@/lib/sales/contact-route-engine";
 import {
   PersistedReviewSchema,
   type PersistedReview,
@@ -189,14 +191,24 @@ export async function persistDiscoveryResult(
   const searchResults = z.array(SearchResultSchema).parse(rawInput.searchResults);
   const fetchedSources = z.array(FetchedSourceReferenceSchema).parse(rawInput.fetchedSources);
   const accounts = z.array(DiscoveredAccountSchema).parse(rawInput.accounts);
-  const buyingSignals = z.array(VerifiedBuyingSignalSchema).parse(rawInput.buyingSignals);
-  const persistedAt = new Date();
+    const buyingSignals = z.array(VerifiedBuyingSignalSchema).parse(rawInput.buyingSignals);
+    const persistedAt = new Date();
 
   return client.$transaction(async (transaction) => {
     await persistPreparedMissionRows(transaction, prepared);
 
     const accountIdsByKey = new Map<string, string>();
     for (const account of accounts) {
+      const accountSource = fetchedSources.find((source) =>
+        account.discoveryEvidenceIds.includes(`source:${source.contentHash}`),
+      );
+      const score = scoreProspectAccount(
+        account,
+        buyingSignals,
+        prepared.brief,
+        accountSource ?? { status: 200, readableExcerpt: "" },
+      );
+      const contactRoutes = deriveContactRoutes(account, fetchedSources);
       const id = accountEntityId(prepared.missionId, account.accountKey);
       accountIdsByKey.set(account.accountKey, id);
       await transaction.prospectAccount.upsert({
@@ -222,6 +234,9 @@ export async function persistDiscoveryResult(
           possibleBuyerRoles: asJson(account.possibleBuyerRoles),
           discoveryEvidenceIds: asJson(account.discoveryEvidenceIds),
           unresolvedQuestions: asJson(account.unresolvedQuestions),
+          score: asJson(score),
+          contactRoutes: asJson(contactRoutes),
+          firstMoveDraft: Prisma.JsonNull,
         },
         update: {
           missionRunId: prepared.missionRunId,
@@ -236,6 +251,8 @@ export async function persistDiscoveryResult(
           possibleBuyerRoles: asJson(account.possibleBuyerRoles),
           discoveryEvidenceIds: asJson(account.discoveryEvidenceIds),
           unresolvedQuestions: asJson(account.unresolvedQuestions),
+          score: asJson(score),
+          contactRoutes: asJson(contactRoutes),
         },
       });
     }
