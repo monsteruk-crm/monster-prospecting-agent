@@ -25,8 +25,9 @@ describe("deriveContactRoutes", () => {
       accountKey: "example.org:example", companyName: "Example", officialDomain: "https://example.org", website: "https://example.org/contact",
       categories: ["VISITOR_ATTRACTION" as const], relevanceHypothesis: "An attraction.", discoveredSignals: [], possibleBuyerRoles: ["Partnerships Director"], discoveryEvidenceIds: [`source:${"b".repeat(64)}`], unresolvedQuestions: [],
     };
-    const sources = [{ sourceUrl: "https://example.org/contact", finalUrl: "https://example.org/contact", status: 200, mimeType: "text/html", readableExcerpt: "Contact partnerships@example.org for commercial enquiries.", byteCount: 60, contentHash: "b".repeat(64), retrievedAt: "2026-08-05T00:00:00.000Z", redirectCount: 0, searchQuery: "example" }];
-    expect(deriveContactRoutes(account, sources)[0]).toMatchObject({ email: "partnerships@example.org", routeType: "CONTACT_PAGE" });
+    const sources = [{ sourceUrl: "https://example.org/contact", finalUrl: "https://example.org/contact", status: 200, mimeType: "text/html", readableExcerpt: "Contact partnerships@acme.org for commercial enquiries.", byteCount: 60, contentHash: "b".repeat(64), retrievedAt: "2026-08-05T00:00:00.000Z", redirectCount: 0, searchQuery: "example" }];
+    expect(deriveContactRoutes(account, sources)[0]).toMatchObject({ email: "partnerships@acme.org", routeType: "PUBLIC_EMAIL" });
+    expect(deriveContactRoutes(account, sources).some((route) => route.routeType === "CONTACT_PAGE" && route.contactPageUrl === "https://example.org/contact")).toBe(true);
     expect(deriveContactRoutes(account, [{ ...sources[0], readableExcerpt: "Contact our team." }], [], { requirePublicEmail: true })).toEqual([]);
   });
 });

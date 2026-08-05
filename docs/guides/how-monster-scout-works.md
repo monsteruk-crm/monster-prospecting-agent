@@ -117,7 +117,13 @@ stateDiagram-v2
   SEARCH_PROVIDER --> OFFICIAL_SOURCE_FETCH
   OFFICIAL_SOURCE_FETCH --> ACCOUNT_EXTRACTION
   ACCOUNT_EXTRACTION --> BUYING_SIGNAL_VERIFICATION
-  BUYING_SIGNAL_VERIFICATION --> READY_FOR_REVIEW
+  BUYING_SIGNAL_VERIFICATION --> CONTACT_PLAN
+  CONTACT_PLAN --> CONTACT_SOURCE_DISCOVERY
+  CONTACT_SOURCE_DISCOVERY --> CONTACT_SOURCE_FETCH
+  CONTACT_SOURCE_FETCH --> CONTACT_EXTRACTION
+  CONTACT_EXTRACTION --> CONTACT_VERIFICATION
+  CONTACT_VERIFICATION --> SCORE_RECALCULATION
+  SCORE_RECALCULATION --> READY_FOR_REVIEW
   READY_FOR_REVIEW --> PAUSED_FOR_REVIEW
   PAUSED_FOR_REVIEW --> APPROVED: APPROVE
   PAUSED_FOR_REVIEW --> REJECTED: REJECT
@@ -175,7 +181,7 @@ sequenceDiagram
   API-->>UI: Render review-ready accounts
 ```
 
-The stream exposes named workflow stages and bounded query metadata, not hidden chain-of-thought or raw page bodies. The same run can later be continued through `POST /api/runs/:missionRunId/search-more`; the additional query results and progress remain attached to that run.
+The stream exposes named workflow stages and bounded query metadata, not hidden chain-of-thought or raw page bodies. After buying-signal verification, the graph performs a bounded contact pass: it uses saved official-page links and explicit page metadata first, then may issue one focused same-site search and fetch up to three official contact pages per account. `PUBLIC_EMAIL` is evaluated only after this pass; unknown or missing contact data stays visible as a research gap. The same run can later be continued through `POST /api/runs/:missionRunId/search-more`, or one account can receive a focused contact continuation through `POST /api/runs/:missionRunId/accounts/:accountId/contact-enrichment`; all additional query results and progress remain attached to that run.
 
 ---
 

@@ -226,7 +226,7 @@ The current form accepts:
 
 The submitted fields are persisted as the mission brief and displayed at the top of the dossier. Research limits remain fixed in the MVP UI: up to five accounts, 12 searches, 20 pages, 20 model calls and USD 2 estimated model cost.
 
-Choose **Only publicly confirmed email** when a role-only route is not useful enough. The run filters accounts before persistence if no email appears in the fetched official-source excerpt. The wording `return only contacts with an email` in instructions activates the same rule for API callers and older UI submissions. The result can contain fewer than five accounts, including zero; this is intentional rather than a fallback to role-only contacts.
+Choose **Only publicly confirmed email** when a role-only route is not useful enough. The run first performs bounded contact enrichment using retained official links and contact metadata, then may search and fetch additional official contact pages. If no explicit email is found, the account remains visible for audit with a contact requirement warning but is excluded from the email-required export. The wording `return only contacts with an email` in instructions activates the same rule for API callers and older UI submissions. The result can contain fewer than five exportable accounts, including zero; no address is guessed.
 
 The UI submits these default run limits:
 
@@ -267,6 +267,8 @@ The dossier begins with a **Mission brief** panel showing the exact owner, geogr
 Mission Control keeps an **Executed runs** list backed by PostgreSQL. Each row shows the mission name, durable `missionRunId`, status and discovery stage; use **Open** to retrieve the dossier again. The dossier’s live/saved output includes the executed queries and their result counts.
 
 Use **Search deeper** on a completed dossier when the first pass did not reach enough useful official sources. This performs another bounded pass using the same mission strategy, requests a deeper search-result window, skips URLs already saved for that run, and persists the new results under the same `missionRunId`. It does not create an unbounded crawler or a separate unowned search.
+
+When an account has only a role-only route, an unsuitable mailbox, or no verified public email for an email-required mission, use **Find better contacts**. This targets the selected account only, checks retained official-page navigation metadata, may run one focused same-site DuckDuckGo search, and fetches at most three additional official pages within the remaining mission budget. It never guesses an address, fetches LinkedIn, submits forms or sends outreach.
 
 ## Why a mission may return fewer than five accounts
 
@@ -367,7 +369,7 @@ A useful route may be:
 - a public partnership or commercial contact page;
 - an official generic business route.
 
-When a public email is present in the fetched official-source excerpt, the dossier shows a clickable `mailto:` address and the approved CSV populates `email`. No email address is guessed from a person's name, domain or naming pattern.
+When a public email is present in an explicitly fetched official source or its retained contact metadata, the dossier shows a clickable `mailto:` address and the approved CSV populates `email`. No email address is guessed from a person's name, domain or naming pattern.
 
 The system does not guess personal email addresses.
 

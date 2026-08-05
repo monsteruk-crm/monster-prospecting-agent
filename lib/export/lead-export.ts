@@ -4,6 +4,7 @@ import { getPrismaClient } from "@/lib/db/client";
 import { Prisma, type PrismaClient } from "@/prisma/generated/client";
 import { ContactRouteSchema, FirstMoveBriefSchema } from "@/lib/sales/contact-schema";
 import { ProspectScoreSchema } from "@/lib/sales/score-engine";
+import { requiresPublicEmail } from "@/lib/sales/contact-route-engine";
 
 export const LeadExportColumnSchema = z.enum([
   "company_name", "website", "country", "city", "contact_name", "role", "email", "source_url", "category", "size/signals", "notes", "confidence", "status", "owner", "last_touch", "opt_out",
@@ -61,7 +62,12 @@ export async function buildApprovedLeadExport(
   if (!run) throw new Error("RUN_NOT_FOUND");
   if (run.review?.status !== "APPROVED") throw new Error("APPROVAL_REQUIRED");
 
-  const rows = run.accounts.map((account) => {
+  const emailRequired = requiresPublicEmail(run.mission.brief as { contactRequirement: "ANY_ROUTE" | "PUBLIC_EMAIL"; instructions: string });
+  const rows = run.accounts.filter((account) => {
+    if (!emailRequired) return true;
+    const routes = z.array(ContactRouteSchema).parse(account.contactRoutes);
+    return routes.some((route) => route.routeType === "PUBLIC_EMAIL" && route.isUsableForSales);
+  }).map((account) => {
     const score = ProspectScoreSchema.safeParse(account.score).success ? ProspectScoreSchema.parse(account.score) : null;
     const routes = z.array(ContactRouteSchema).parse(account.contactRoutes);
     const route = routes[0];

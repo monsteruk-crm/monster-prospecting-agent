@@ -19,6 +19,7 @@ import {
   type MissionSearchProgressEvent,
 } from "@/lib/sales/mission-progress";
 import { SalesMissionBriefSchema, type SalesMissionBrief } from "@/lib/sales/mission-schema";
+import { logRuntimeWarning } from "@/lib/observability/runtime-logger";
 
 export type DiscoveryRunHooks = {
   onPrepared?: (prepared: PreparedSalesMissionForDiscovery) => Promise<void> | void;
@@ -111,6 +112,15 @@ export async function executeDiscoveryRun(
     accounts: discovered.discoveredAccounts,
     buyingSignals: discovered.buyingSignals,
   });
+  if (discovered.errors.length > 0 || discovered.warnings.length > 0) {
+    logRuntimeWarning("mission.discovery.partial", {
+      missionRunId: discovered.missionRunId,
+      errorCodes: discovered.errors.map((error) => error.code).slice(0, 20),
+      warningCodes: discovered.warnings.map((warning) => warning.code).slice(0, 20),
+      searchesUsed: discovered.budget.searchesUsed,
+      pagesUsed: discovered.budget.pagesUsed,
+    });
+  }
 
   return { prepared, discovered, persisted };
 }

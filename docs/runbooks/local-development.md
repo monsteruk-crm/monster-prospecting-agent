@@ -74,6 +74,18 @@ curl --request POST http://localhost:3000/api/missions/discover \
 
 The route starts a fresh bounded run, persists the prepared mission brief and search strategy, performs live DuckDuckGo and source fetch requests, filters known review sites, job boards, directories, ticket resellers and non-first-party paths before `safe_fetch`, extracts accounts from short source excerpts, verifies buying-signal candidates, persists scored entities and a `PENDING` review snapshot, then returns `201` with partial results/errors. The response includes source-linked `accounts[]`, `buyingSignals[]` and `review`; a signal with no supported excerpt or no verification remains explicitly unverified with `MISSING_INFORMATION` and/or `UNKNOWN` freshness. The graph is checkpointed after verification. HTTP 403 source failures remain visible as partial errors rather than being bypassed.
 
+## Vercel runtime diagnostics
+
+Vercel captures `console.log`, `console.warn` and `console.error` from App Router route handlers in Runtime Logs. Monster Scout emits structured JSON events for discovery requests. A failed request includes `event: "api.request.failed"`, the route, a Vercel/request correlation ID, duration, safe error name/message/stack and bounded usage fields. Partial discovery failures emit `event: "mission.discovery.partial"` even when the route returns a partial result.
+
+Use the production deployment and the request ID returned in a streamed error message to locate the corresponding invocation:
+
+```bash
+vercel logs --environment production --level error --since 1h --json --expand
+```
+
+The PostgreSQL `sslmode` warning is not itself a mission failure. The database client normalises legacy `prefer`, `require` and `verify-ca` modes to explicit `verify-full`; the deployment should still keep its provider’s current connection string in the configured environment variable. DuckDuckGo searches use the HTML endpoint’s form `POST` surface because GET requests can be rejected with HTTP 403 by hosted-function egress addresses. A 403 remains a visible provider error and is never bypassed.
+
 Mission Control exposes the full MVP brief before launch and shows the persisted brief above the account dossiers after launch. Geography, buyer roles, required/preferred signals and exclusions are entered as comma-separated values. Set `Contact requirement` to `Only publicly confirmed email` when every returned account must have an email; the same rule is also recognised from instructions such as `return only contacts with an email`.
 
 Mission Control launches through `POST /api/missions/discover/stream`, so the page shows saved stage/query events while the graph runs. Every run ID is written to PostgreSQL. The `Executed runs` panel loads `GET /api/runs?limit=20`; opening a row calls `GET /api/runs/:missionRunId`. Use `Search deeper` on a completed dossier to call `POST /api/runs/:missionRunId/search-more`; it adds bounded budget, deduplicates previous URLs and attaches new query/search progress to the same run.

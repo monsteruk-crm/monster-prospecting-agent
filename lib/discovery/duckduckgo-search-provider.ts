@@ -225,9 +225,6 @@ export class DuckDuckGoSearchProvider implements SearchProvider {
     }
 
     const endpoint = new URL(DUCKDUCKGO_SEARCH_ENDPOINT);
-    endpoint.searchParams.set("q", request.query);
-    endpoint.searchParams.set("kl", "wt-wt");
-    endpoint.searchParams.set("kp", "1");
 
     let currentUrl = await validatePublicUrl(endpoint.toString(), this.dependencies.resolveAddresses);
     let redirectCount = 0;
@@ -242,13 +239,16 @@ export class DuckDuckGoSearchProvider implements SearchProvider {
       const timeout = setTimeout(() => controller.abort(), timeoutMs);
       try {
         const response = await fetchImplementation(currentUrl, {
-          method: "GET",
+          method: "POST",
           redirect: "manual",
           signal: controller.signal,
           headers: {
             Accept: "text/html, application/xhtml+xml",
+            "Content-Type": "application/x-www-form-urlencoded",
+            Referer: "https://duckduckgo.com/",
             "User-Agent": "MonsterScoutDuckDuckGoSearch/1.0",
           },
+          body: new URLSearchParams({ q: request.query, kl: "wt-wt", kp: "1" }),
         });
 
         if (response.status >= 300 && response.status < 400) {

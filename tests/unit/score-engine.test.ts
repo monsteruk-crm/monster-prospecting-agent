@@ -26,10 +26,10 @@ describe("scoreProspectAccount", () => {
     expect(score.caps).toContain("NO_USABLE_PUBLIC_CONTACT_ROUTE");
   });
 
-  test("treats a role-only route as usable MVP reachability", () => {
+  test("keeps role-only reachability below a verified public route", () => {
     const route = ContactRouteSchema.parse({ targetRole: "Head of Programming", sourceEvidenceIds: ["source:hash"], routeType: "ROLE_ONLY", roleConfidence: "MEDIUM", dataFreshness: "UNKNOWN" });
     const score = scoreProspectAccount(account, [], brief, { status: 200, readableExcerpt: "A sufficiently long official source excerpt for scoring." }, [route]);
-    expect(score.caps).not.toContain("NO_USABLE_PUBLIC_CONTACT_ROUTE");
-    expect(score.reachability).toBe(8);
+    expect(score.caps).toContain("NO_USABLE_PUBLIC_CONTACT_ROUTE");
+    expect(score.reachability).toBe(3);
   });
 });

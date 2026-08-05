@@ -1,6 +1,8 @@
 import { createHash } from "node:crypto";
 
+import { load } from "cheerio";
 import { tool } from "@langchain/core/tools";
+import { getDomain } from "tldts";
 import { z } from "zod";
 
 import {
@@ -15,6 +17,9 @@ const DEFAULT_TIMEOUT_MS = 10_000;
 const MAX_URL_LENGTH = 2_048;
 const MAX_TITLE_LENGTH = 300;
 const MAX_REDIRECT_LOCATION_LENGTH = 2_048;
+const MAX_LINKS = 100;
+const MAX_CONTACT_HINTS = 20;
+const MAX_HINT_TEXT_LENGTH = 300;
 
 const ALLOWED_MIME_TYPES = new Set([
   "application/xhtml+xml",
@@ -28,6 +33,25 @@ export const SafeFetchInputSchema = z.object({
   url: z.string().trim().url().max(MAX_URL_LENGTH),
 });
 
+export const PublicPageLinkSchema = z.object({
+  url: z.string().url().max(MAX_URL_LENGTH),
+  anchorText: z.string().max(MAX_HINT_TEXT_LENGTH),
+  relationship: z.string().max(MAX_HINT_TEXT_LENGTH).optional(),
+  sameSite: z.boolean(),
+});
+
+export const PublicEmailHintSchema = z.object({
+  email: z.string().email(),
+  sourceKind: z.enum(["VISIBLE_TEXT", "MAILTO", "JSON_LD"]),
+  surroundingText: z.string().max(MAX_HINT_TEXT_LENGTH).optional(),
+});
+
+export const PublicPhoneHintSchema = z.object({
+  phone: z.string().trim().min(7).max(80),
+  sourceKind: z.enum(["VISIBLE_TEXT", "TEL", "JSON_LD"]),
+  surroundingText: z.string().max(MAX_HINT_TEXT_LENGTH).optional(),
+});
+
 export const SafeFetchResultSchema = z.object({
   requestedUrl: z.string().url(),
   finalUrl: z.string().url(),
@@ -39,10 +63,14 @@ export const SafeFetchResultSchema = z.object({
   contentHash: z.string().regex(/^[a-f0-9]{64}$/),
   retrievedAt: z.string().datetime(),
   redirectCount: z.number().int().nonnegative().max(DEFAULT_MAX_REDIRECTS),
+  canonicalUrl: z.string().url().optional(),
+  links: z.array(PublicPageLinkSchema).max(MAX_LINKS).default(() => []),
+  publicEmailHints: z.array(PublicEmailHintSchema).max(MAX_CONTACT_HINTS).default(() => []),
+  publicPhoneHints: z.array(PublicPhoneHintSchema).max(MAX_CONTACT_HINTS).default(() => []),
 });
 
 export type SafeFetchInput = z.infer<typeof SafeFetchInputSchema>;
-export type SafeFetchResult = z.infer<typeof SafeFetchResultSchema>;
+export type SafeFetchResult = z.input<typeof SafeFetchResultSchema>;
 
 export const SAFE_FETCH_ERROR_CODES = [
   "INVALID_URL",
@@ -95,45 +123,132 @@ function normaliseMimeType(contentType: string | null): string {
   return contentType?.split(";", 1)[0]?.trim().toLowerCase() ?? "";
 }
 
-function decodeHtmlEntities(value: string): string {
-  return value.replace(/&(#(?:x[\da-f]+|\d+)|amp|apos|gt|lt|nbsp|quot);/gi, (entity, body: string) => {
-    const lowerBody = body.toLowerCase();
-    if (lowerBody === "amp") return "&";
-    if (lowerBody === "apos") return "'";
-    if (lowerBody === "gt") return ">";
-    if (lowerBody === "lt") return "<";
-    if (lowerBody === "nbsp") return " ";
-    if (lowerBody === "quot") return '"';
+function boundedText(value: string | undefined): string {
+  return (value ?? "").replace(/\s+/g, " ").trim().slice(0, MAX_HINT_TEXT_LENGTH);
+}
 
-    const codePoint = lowerBody.startsWith("#x")
-      ? Number.parseInt(lowerBody.slice(2), 16)
-      : Number.parseInt(lowerBody.slice(1), 10);
-    return Number.isInteger(codePoint) && codePoint > 0 && codePoint <= 0x10ffff
-      ? String.fromCodePoint(codePoint)
-      : entity;
+function normaliseEmail(value: string): string | undefined {
+  const email = value.trim().toLowerCase().replace(/[),.;:]+$/, "");
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) ? email : undefined;
+}
+
+function normalisePhone(value: string): string | undefined {
+  const phone = value.replace(/^tel:/i, "").split(/[?#]/, 1)[0]?.trim();
+  return phone && /\d/.test(phone) && phone.replace(/\D/g, "").length >= 7 ? phone.slice(0, 80) : undefined;
+}
+
+function sameRegistrableDomain(left: URL, right: URL): boolean {
+  const leftDomain = getDomain(left.hostname);
+  const rightDomain = getDomain(right.hostname);
+  return Boolean(leftDomain && rightDomain && leftDomain === rightDomain);
+}
+
+function extractJsonLdContacts($: ReturnType<typeof load>) {
+  const emails: Array<z.infer<typeof PublicEmailHintSchema>> = [];
+  const phones: Array<z.infer<typeof PublicPhoneHintSchema>> = [];
+  const seenEmails = new Set<string>();
+  const seenPhones = new Set<string>();
+
+  const visit = (value: unknown) => {
+    if (!value || typeof value !== "object") return;
+    if (Array.isArray(value)) {
+      value.slice(0, 10).forEach(visit);
+      return;
+    }
+    const record = value as Record<string, unknown>;
+    const email = typeof record.email === "string" ? normaliseEmail(record.email) : undefined;
+    if (email && !seenEmails.has(email) && emails.length < MAX_CONTACT_HINTS) {
+      seenEmails.add(email);
+      emails.push({ email, sourceKind: "JSON_LD", surroundingText: boundedText(typeof record.name === "string" ? record.name : undefined) || undefined });
+    }
+    const telephone = typeof record.telephone === "string" ? normalisePhone(record.telephone) : undefined;
+    if (telephone && !seenPhones.has(telephone) && phones.length < MAX_CONTACT_HINTS) {
+      seenPhones.add(telephone);
+      phones.push({ phone: telephone, sourceKind: "JSON_LD", surroundingText: boundedText(typeof record.name === "string" ? record.name : undefined) || undefined });
+    }
+    Object.values(record).slice(0, 20).forEach(visit);
+  };
+
+  $("script[type='application/ld+json']").each((_, element) => {
+    try {
+      const raw = $(element).text().trim();
+      if (raw) visit(JSON.parse(raw));
+    } catch {
+      // Invalid JSON-LD is untrusted page content, not a fetch failure.
+    }
   });
+  return { emails, phones };
 }
 
-function readableHtml(html: string): { title?: string; readableText: string } {
-  const titleMatch = /<title\b[^>]*>([\s\S]*?)<\/title\s*>/i.exec(html);
-  const title = titleMatch
-    ? decodeHtmlEntities(titleMatch[1].replace(/<[^>]+>/g, " ")).replace(/\s+/g, " ").trim().slice(0, MAX_TITLE_LENGTH)
-    : undefined;
+function readableHtml(html: string, pageUrl: URL): {
+  title?: string;
+  readableText: string;
+  canonicalUrl?: string;
+  links: Array<z.infer<typeof PublicPageLinkSchema>>;
+  publicEmailHints: Array<z.infer<typeof PublicEmailHintSchema>>;
+  publicPhoneHints: Array<z.infer<typeof PublicPhoneHintSchema>>;
+} {
+  const $ = load(html);
+  const jsonLd = extractJsonLdContacts($);
+  $("script, style, template, noscript, svg").remove();
+  const title = boundedText($("title").first().text()).slice(0, MAX_TITLE_LENGTH) || undefined;
+  const readableText = `${title ?? ""} ${$("body").html() ?? ""}`.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim();
+  const links: Array<z.infer<typeof PublicPageLinkSchema>> = [];
+  const seenLinks = new Set<string>();
+  $("a[href]").each((_, element) => {
+    if (links.length >= MAX_LINKS) return;
+    const rawHref = $(element).attr("href")?.trim();
+    if (!rawHref || /^(?:javascript:|data:|#)/i.test(rawHref)) return;
+    let url: URL;
+    try { url = new URL(rawHref, pageUrl); } catch { return; }
+    if (url.protocol !== "http:" && url.protocol !== "https:" && !/^mailto:|^tel:/i.test(rawHref)) return;
+    if (/^mailto:|^tel:/i.test(rawHref)) return;
+    url.hash = "";
+    const normalised = url.toString();
+    if (seenLinks.has(normalised)) return;
+    seenLinks.add(normalised);
+    const rel = $(element).attr("rel")?.trim();
+    links.push({ url: normalised, anchorText: boundedText($(element).text()), ...(rel ? { relationship: rel } : {}), sameSite: sameRegistrableDomain(pageUrl, url) });
+  });
 
-  const withoutNonContent = html
-    .replace(/<!--[\s\S]*?-->/g, " ")
-    .replace(/<(script|style|template|noscript|svg)\b[^>]*>[\s\S]*?<\/\1\s*>/gi, " ")
-    .replace(/<[^>]+>/g, " ");
-  const readableText = decodeHtmlEntities(withoutNonContent).replace(/\s+/g, " ").trim();
-
-  return { title: title || undefined, readableText };
+  const publicEmailHints: Array<z.infer<typeof PublicEmailHintSchema>> = [];
+  const publicPhoneHints: Array<z.infer<typeof PublicPhoneHintSchema>> = [];
+  const seenEmails = new Set<string>();
+  const seenPhones = new Set<string>();
+  const addEmail = (raw: string | undefined, sourceKind: z.infer<typeof PublicEmailHintSchema>["sourceKind"], context?: string) => {
+    const email = raw ? normaliseEmail(raw) : undefined;
+    if (!email || seenEmails.has(email) || publicEmailHints.length >= MAX_CONTACT_HINTS) return;
+    seenEmails.add(email);
+    publicEmailHints.push({ email, sourceKind, ...(boundedText(context) ? { surroundingText: boundedText(context) } : {}) });
+  };
+  const addPhone = (raw: string | undefined, sourceKind: z.infer<typeof PublicPhoneHintSchema>["sourceKind"], context?: string) => {
+    const phone = raw ? normalisePhone(raw) : undefined;
+    if (!phone || seenPhones.has(phone) || publicPhoneHints.length >= MAX_CONTACT_HINTS) return;
+    seenPhones.add(phone);
+    publicPhoneHints.push({ phone, sourceKind, ...(boundedText(context) ? { surroundingText: boundedText(context) } : {}) });
+  };
+  const emailPattern = /\b[^\s<>"']+@[^\s<>"']+\.[A-Za-z]{2,}\b/g;
+  const phonePattern = /(?:\+?\d[\d().\-\s]{6,}\d)/g;
+  const visibleText = $("body").text();
+  for (const match of visibleText.match(emailPattern) ?? []) addEmail(match, "VISIBLE_TEXT", visibleText.slice(Math.max(0, visibleText.indexOf(match) - 80), visibleText.indexOf(match) + match.length + 80));
+  for (const match of visibleText.match(phonePattern) ?? []) addPhone(match, "VISIBLE_TEXT", visibleText.slice(Math.max(0, visibleText.indexOf(match) - 80), visibleText.indexOf(match) + match.length + 80));
+  $("a[href^='mailto:']").each((_, element) => addEmail($(element).attr("href")?.slice(7), "MAILTO", $(element).text()));
+  $("a[href^='tel:']").each((_, element) => addPhone($(element).attr("href"), "TEL", $(element).text()));
+  for (const hint of jsonLd.emails) addEmail(hint.email, "JSON_LD", hint.surroundingText);
+  for (const hint of jsonLd.phones) addPhone(hint.phone, "JSON_LD", hint.surroundingText);
+  const canonicalRaw = $("link[rel='canonical']").attr("href");
+  let canonicalUrl: string | undefined;
+  if (canonicalRaw) {
+    try { const url = new URL(canonicalRaw, pageUrl); if (url.protocol === "http:" || url.protocol === "https:") canonicalUrl = url.toString(); } catch { /* ignore invalid page metadata */ }
+  }
+  return { title, readableText, canonicalUrl, links, publicEmailHints, publicPhoneHints };
 }
 
-function extractReadableText(mimeType: string, bytes: Uint8Array): { title?: string; readableText: string } {
+function extractReadableText(mimeType: string, bytes: Uint8Array, pageUrl: URL) {
   const text = new TextDecoder("utf-8").decode(bytes);
   return mimeType === "text/html" || mimeType === "application/xhtml+xml"
-    ? readableHtml(text)
-    : { readableText: text.replace(/\s+/g, " ").trim() };
+    ? readableHtml(text, pageUrl)
+    : { readableText: text.replace(/\s+/g, " ").trim(), links: [], publicEmailHints: [], publicPhoneHints: [] };
 }
 
 async function readBody(response: Response, maxBytes: number, url: string): Promise<Uint8Array> {
@@ -273,7 +388,7 @@ export async function safeFetch(
       }
 
       const bytes = await readBody(response, maxBytes, currentUrl.toString());
-      const { title, readableText } = extractReadableText(mimeType, bytes);
+      const { title, readableText, canonicalUrl, links, publicEmailHints, publicPhoneHints } = extractReadableText(mimeType, bytes, currentUrl);
       const retrievedAt = (dependencies.now ?? (() => new Date()))().toISOString();
 
       return SafeFetchResultSchema.parse({
@@ -287,6 +402,10 @@ export async function safeFetch(
         contentHash: createHash("sha256").update(bytes).digest("hex"),
         retrievedAt,
         redirectCount,
+        canonicalUrl,
+        links,
+        publicEmailHints,
+        publicPhoneHints,
       });
     } catch (error) {
       throw asFetchError(error, currentUrl.toString(), controller.signal);

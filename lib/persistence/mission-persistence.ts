@@ -24,7 +24,8 @@ import {
   type VerifiedBuyingSignal,
 } from "@/lib/sales/mission-schema";
 import { scoreProspectAccount } from "@/lib/sales/score-engine";
-import { deriveContactRoutes, requiresPublicEmail } from "@/lib/sales/contact-route-engine";
+import { deriveContactRoutes } from "@/lib/sales/contact-route-engine";
+import { getDomain } from "tldts";
 import {
   PersistedReviewSchema,
   type PersistedReview,
@@ -112,6 +113,15 @@ function auditEntityId(idempotencyKey: string): string {
 
 function eventDateValue(eventDate: string | null): Date | null {
   return eventDate ? new Date(`${eventDate}T00:00:00.000Z`) : null;
+}
+
+function registrableDomain(value: string | null | undefined): string {
+  if (!value) return "";
+  try {
+    return getDomain(new URL(value).hostname) ?? "";
+  } catch {
+    return "";
+  }
 }
 
 function parsePreparedInput(input: PreparedMissionPersistenceInput): PreparedMissionPersistenceInput {
@@ -309,14 +319,17 @@ export async function persistDiscoveryResult(
       const accountSource = fetchedSources.find((source) =>
         account.discoveryEvidenceIds.includes(`source:${source.contentHash}`),
       );
-      const contactRoutes = deriveContactRoutes(account, fetchedSources, prepared.brief.buyerRoles, {
-        requirePublicEmail: requiresPublicEmail(prepared.brief),
-      });
-      if (requiresPublicEmail(prepared.brief) && contactRoutes.length === 0) {
-        continue;
-      }
+      const contactRoutes = deriveContactRoutes(account, fetchedSources, prepared.brief.buyerRoles);
+      const accountDomain = registrableDomain(account.officialDomain ?? account.website);
+      const mergedEvidenceIds = [...new Set([
+        ...account.discoveryEvidenceIds,
+        ...fetchedSources.filter((source) => {
+          return accountDomain !== "" && registrableDomain(source.finalUrl) === accountDomain;
+        }).map((source) => `source:${source.contentHash}`),
+      ])];
+      const persistedAccount = { ...account, discoveryEvidenceIds: mergedEvidenceIds };
       const score = scoreProspectAccount(
-        account,
+        persistedAccount,
         buyingSignals,
         prepared.brief,
         accountSource ?? { status: 200, readableExcerpt: "" },
@@ -336,34 +349,34 @@ export async function persistDiscoveryResult(
           missionId: prepared.missionId,
           missionRunId: prepared.missionRunId,
           accountKey: account.accountKey,
-          companyName: account.companyName,
-          officialDomain: account.officialDomain,
-          website: account.website,
-          country: account.country,
-          city: account.city,
-          categories: asJson(account.categories),
-          relevanceHypothesis: account.relevanceHypothesis,
-          discoveredSignals: asJson(account.discoveredSignals),
-          possibleBuyerRoles: asJson(account.possibleBuyerRoles),
-          discoveryEvidenceIds: asJson(account.discoveryEvidenceIds),
-          unresolvedQuestions: asJson(account.unresolvedQuestions),
+          companyName: persistedAccount.companyName,
+          officialDomain: persistedAccount.officialDomain,
+          website: persistedAccount.website,
+          country: persistedAccount.country,
+          city: persistedAccount.city,
+          categories: asJson(persistedAccount.categories),
+          relevanceHypothesis: persistedAccount.relevanceHypothesis,
+          discoveredSignals: asJson(persistedAccount.discoveredSignals),
+          possibleBuyerRoles: asJson(persistedAccount.possibleBuyerRoles),
+          discoveryEvidenceIds: asJson(persistedAccount.discoveryEvidenceIds),
+          unresolvedQuestions: asJson(persistedAccount.unresolvedQuestions),
           score: asJson(score),
           contactRoutes: asJson(contactRoutes),
           firstMoveDraft: Prisma.JsonNull,
         },
         update: {
           missionRunId: prepared.missionRunId,
-          companyName: account.companyName,
-          officialDomain: account.officialDomain,
-          website: account.website,
-          country: account.country,
-          city: account.city,
-          categories: asJson(account.categories),
-          relevanceHypothesis: account.relevanceHypothesis,
-          discoveredSignals: asJson(account.discoveredSignals),
-          possibleBuyerRoles: asJson(account.possibleBuyerRoles),
-          discoveryEvidenceIds: asJson(account.discoveryEvidenceIds),
-          unresolvedQuestions: asJson(account.unresolvedQuestions),
+          companyName: persistedAccount.companyName,
+          officialDomain: persistedAccount.officialDomain,
+          website: persistedAccount.website,
+          country: persistedAccount.country,
+          city: persistedAccount.city,
+          categories: asJson(persistedAccount.categories),
+          relevanceHypothesis: persistedAccount.relevanceHypothesis,
+          discoveredSignals: asJson(persistedAccount.discoveredSignals),
+          possibleBuyerRoles: asJson(persistedAccount.possibleBuyerRoles),
+          discoveryEvidenceIds: asJson(persistedAccount.discoveryEvidenceIds),
+          unresolvedQuestions: asJson(persistedAccount.unresolvedQuestions),
           score: asJson(score),
           contactRoutes: asJson(contactRoutes),
         },
@@ -374,8 +387,10 @@ export async function persistDiscoveryResult(
     const evidenceIdsByHash = new Map<string, string>();
     for (const source of fetchedSources) {
       const id = evidenceEntityId(prepared.missionRunId, source.contentHash);
+      const sourceDomain = registrableDomain(source.finalUrl);
       const accountKey = accounts.find((account) =>
-        account.discoveryEvidenceIds.includes(`source:${source.contentHash}`),
+        account.discoveryEvidenceIds.includes(`source:${source.contentHash}`) ||
+        (sourceDomain !== "" && sourceDomain === registrableDomain(account.officialDomain ?? account.website)),
       )?.accountKey;
       const accountId = accountKey ? accountIdsByKey.get(accountKey) : undefined;
       evidenceIds.push(id);
@@ -534,6 +549,22 @@ export async function persistDiscoveryResult(
       },
       update: {
         payload: asJson({ reviewSnapshotId, accountCount: accounts.length, signalCount: buyingSignals.length }),
+      },
+    });
+
+    const contactAuditKey = `${prepared.missionRunId}:contact-enrichment-completed`;
+    await transaction.missionAuditEvent.upsert({
+      where: { idempotencyKey: contactAuditKey },
+      create: {
+        id: auditEntityId(contactAuditKey),
+        idempotencyKey: contactAuditKey,
+        missionId: prepared.missionId,
+        missionRunId: prepared.missionRunId,
+        eventType: "CONTACT_ENRICHMENT_COMPLETED",
+        payload: asJson({ accounts: accounts.map((account) => ({ accountKey: account.accountKey, contactRequirementStatus: account.contactRequirementStatus, contactSearchSummary: account.contactSearchSummary })) }),
+      },
+      update: {
+        payload: asJson({ accounts: accounts.map((account) => ({ accountKey: account.accountKey, contactRequirementStatus: account.contactRequirementStatus, contactSearchSummary: account.contactSearchSummary })) }),
       },
     });
 

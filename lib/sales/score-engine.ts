@@ -59,13 +59,22 @@ export function scoreProspectAccount(
   const monsterRelevance = account.categories.some((category) => eligibleCategories.has(category))
     ? account.relevanceHypothesis.length >= 40 ? 20 : 15
     : 5;
-  const hasContactRoute = contactRoutes.length > 0;
-  const hasContactPage = contactRoutes.some((route) => route.routeType === "CONTACT_PAGE");
-  const reachability = hasContactPage ? 15 : hasContactRoute ? 8 : 0;
+  const usableRoutes = contactRoutes.filter((route) => route.isUsableForSales && route.routeType !== "ROLE_ONLY");
+  const hasContactRoute = usableRoutes.length > 0;
+  const bestRoute = usableRoutes.sort((left, right) => right.routeScore - left.routeScore)[0];
+  const reachability = bestRoute?.routeType === "PUBLIC_EMAIL"
+    ? bestRoute.routeScore >= 88 ? 15 : 9
+    : bestRoute?.routeType === "CONTACT_PAGE" || bestRoute?.routeType === "CONTACT_FORM" ? 11
+      : bestRoute?.routeType === "PUBLIC_PHONE" ? 7
+        : bestRoute?.routeType === "PROFESSIONAL_PROFILE" ? 5
+          : contactRoutes.some((route) => route.routeType === "ROLE_ONLY") ? 3 : 0;
   const evidence = source.status >= 200 && source.status < 300 && source.readableExcerpt.length > 40 ? 15 : 8;
   const uncappedTotal = buyerFit + timing + monsterRelevance + reachability + evidence;
-  const caps = hasContactRoute ? [] : ["NO_USABLE_PUBLIC_CONTACT_ROUTE"];
-  const total = hasContactRoute ? uncappedTotal : Math.min(70, uncappedTotal);
+  const caps = [
+    ...(!hasContactRoute ? ["NO_USABLE_PUBLIC_CONTACT_ROUTE"] : []),
+    ...(brief.contactRequirement === "PUBLIC_EMAIL" && !contactRoutes.some((route) => route.routeType === "PUBLIC_EMAIL" && route.isUsableForSales) ? ["CONTACT_REQUIREMENT_NOT_MET"] : []),
+  ];
+  const total = caps.length === 0 ? uncappedTotal : Math.min(70, uncappedTotal);
   const scoreState = total >= 80 ? "HOT" : total >= 55 ? "WARM" : total >= 30 ? "COLD" : "UNQUALIFIED";
 
   return ProspectScoreSchema.parse({

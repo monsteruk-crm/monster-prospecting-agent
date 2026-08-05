@@ -29,6 +29,20 @@ export function getDatabaseConnectionString(): string {
     );
   }
 
+  return normaliseSslMode(connectionString);
+}
+
+function normaliseSslMode(connectionString: string): string {
+  try {
+    const url = new URL(connectionString);
+    const sslMode = url.searchParams.get("sslmode");
+    if (sslMode && ["prefer", "require", "verify-ca"].includes(sslMode)) {
+      url.searchParams.set("sslmode", "verify-full");
+      return url.toString();
+    }
+  } catch {
+    // Preserve the original value so Prisma can report its normal connection error.
+  }
   return connectionString;
 }
 

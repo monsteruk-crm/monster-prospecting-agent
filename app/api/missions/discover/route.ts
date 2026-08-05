@@ -6,10 +6,14 @@ import {
   persistDiscoveryResult,
   persistPreparedMission,
 } from "@/lib/persistence/mission-persistence";
+import { logRouteCompleted, logRouteFailure, logRouteStart, requestLogContext } from "@/lib/observability/runtime-logger";
 
 export const runtime = "nodejs";
 
 export async function POST(request: Request) {
+  const startedAt = Date.now();
+  const logContext = requestLogContext(request, "/api/missions/discover");
+  logRouteStart(logContext);
   let payload: unknown;
 
   try {
@@ -92,6 +96,7 @@ export async function POST(request: Request) {
       accounts: discovered.discoveredAccounts,
       buyingSignals: discovered.buyingSignals,
     });
+    logRouteCompleted(logContext, startedAt, { missionRunId: discovered.missionRunId, accountCount: discovered.discoveredAccounts.length, searchCount: discovered.budget.searchesUsed, pageCount: discovered.budget.pagesUsed });
 
     return Response.json(
       {
@@ -122,6 +127,7 @@ export async function POST(request: Request) {
       },
     );
   } catch (error) {
+    logRouteFailure(logContext, startedAt, error);
     if (error instanceof DatabaseConfigurationError) {
       return Response.json(
         {
@@ -137,7 +143,8 @@ export async function POST(request: Request) {
       {
         error: {
           code: "MISSION_DISCOVERY_OR_PERSISTENCE_FAILED",
-          message: "The bounded discovery run could not be completed and persisted.",
+            message: "The bounded discovery run could not be completed and persisted.",
+            requestId: logContext.requestId,
         },
       },
       { status: 503 },

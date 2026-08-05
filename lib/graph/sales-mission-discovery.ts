@@ -53,7 +53,7 @@ import {
   type SafeFetchInput,
   type SafeFetchResult,
 } from "@/lib/tools/safe-fetch";
-import { extractPublicEmail, requiresPublicEmail } from "@/lib/sales/contact-route-engine";
+import { deriveContactRoutes, extractPublicEmail, requiresPublicEmail } from "@/lib/sales/contact-route-engine";
 import {
   MissionProgressEventSchema,
   MissionSearchProgressEventSchema,
@@ -62,6 +62,7 @@ import {
 } from "@/lib/sales/mission-progress";
 import type { PostgresSaver } from "@langchain/langgraph-checkpoint-postgres";
 import { getSalesMissionCheckpointer } from "@/lib/graph/checkpointer";
+import { getDomain } from "tldts";
 
 export const SALES_MISSION_DISCOVERY_GRAPH_VERSION = "act-1-discovery-v1";
 const MAX_SEARCH_RESULTS_PER_QUERY = 100;
@@ -70,6 +71,11 @@ const MAX_EXCERPT_LENGTH = 600;
 const appendOnly = <T extends z.ZodType>(schema: T) =>
   new ReducedValue(z.array(schema).default(() => []), {
     reducer: (current, update) => current.concat(update),
+  });
+
+const replaceable = <T extends z.ZodType>(schema: T) =>
+  new ReducedValue(z.array(schema).default(() => []), {
+    reducer: (_current, update) => update,
   });
 
 export const SalesMissionDiscoveryGraphState = new StateSchema({
@@ -82,8 +88,8 @@ export const SalesMissionDiscoveryGraphState = new StateSchema({
   searchResults: appendOnly(SearchResultSchema),
   fetchedSources: appendOnly(FetchedSourceReferenceSchema),
   accountExtractionCandidates: appendOnly(AccountExtractionCandidateSchema),
-  discoveredAccounts: appendOnly(DiscoveredAccountSchema),
-  accountIds: appendOnly(z.string().min(1)),
+  discoveredAccounts: replaceable(DiscoveredAccountSchema),
+  accountIds: replaceable(z.string().min(1)),
   buyingSignals: appendOnly(VerifiedBuyingSignalSchema),
   buyingSignalIds: appendOnly(z.string().min(1)),
   evidenceIds: appendOnly(z.string().min(1)),
@@ -136,6 +142,8 @@ export interface SalesMissionDiscoveryDependencies {
   skipCheckpoint?: boolean;
   onProgress?: MissionProgressReporter;
   onSearchProgress?: MissionSearchProgressReporter;
+  contactAccountKeys?: readonly string[];
+  skipMarketSearch?: boolean;
 }
 
 async function reportProgress(
@@ -329,6 +337,16 @@ function createSearchProviderNode(
   const searchProvider = dependencies.searchProvider ?? duckDuckGoSearchProvider;
 
   return async (state) => {
+    if (dependencies.skipMarketSearch) {
+      return {
+        searchResults: [],
+        budget: state.budget,
+        warnings: [],
+        errors: [],
+        status: "RUNNING" as const,
+        discoveryStage: "CONTACT_PLAN" as const,
+      };
+    }
     const queries = state.searchStrategy.queryFamilies.flatMap((family) => family.queries);
     const searchBudgetRemaining = Math.max(0, state.budget.maxSearches - state.budget.searchesUsed);
     const pageBudgetRemaining = Math.max(0, state.budget.maxPages - state.budget.pagesUsed);
@@ -532,6 +550,10 @@ function createFetchOfficialSourcesNode(
           retrievedAt: parsedResult.retrievedAt,
           redirectCount: parsedResult.redirectCount,
           searchQuery: candidate.query,
+          canonicalUrl: parsedResult.canonicalUrl,
+          links: parsedResult.links,
+          publicEmailHints: parsedResult.publicEmailHints,
+          publicPhoneHints: parsedResult.publicPhoneHints,
         });
         fetchedSources.push(sourceReference);
         evidenceIds.push(`source:${parsedResult.contentHash}`);
@@ -604,8 +626,6 @@ function createExtractAccountsNode(
     const warnings: Array<z.infer<typeof GraphWarningSchema>> = [];
     const errors: Array<z.infer<typeof GraphErrorSchema>> = [];
     const existingAccountKeys = new Set(state.discoveredAccounts.map((account) => account.accountKey));
-    const emailRequired = requiresPublicEmail(state.brief);
-    let filteredNoPublicEmail = 0;
     let modelCallsUsed = 0;
 
     await reportProgress(dependencies, {
@@ -643,11 +663,6 @@ function createExtractAccountsNode(
           account,
         });
 
-        if (emailRequired && !extractPublicEmail(source.readableExcerpt)) {
-          filteredNoPublicEmail += 1;
-          continue;
-        }
-
         accountExtractionCandidates.push(candidate);
 
         if (!existingAccountKeys.has(candidate.accountKey)) {
@@ -678,13 +693,6 @@ function createExtractAccountsNode(
       }
     }
 
-    if (filteredNoPublicEmail > 0) {
-      warnings.push({
-        code: "ACCOUNT_FILTERED_NO_PUBLIC_EMAIL",
-        message: `Filtered ${filteredNoPublicEmail} extracted account(s) because the brief requires a publicly confirmed email address.`,
-      });
-    }
-
     if (state.budget.maxModelCalls - state.budget.modelCallsUsed < 2 && sources.length > 0) {
       warnings.push({
         code: "MODEL_CALL_BUDGET_TOO_LOW",
@@ -694,8 +702,8 @@ function createExtractAccountsNode(
 
     return {
       accountExtractionCandidates,
-      discoveredAccounts,
-      accountIds,
+      discoveredAccounts: [...state.discoveredAccounts, ...discoveredAccounts],
+      accountIds: [...state.accountIds, ...accountIds],
       budget: {
         ...state.budget,
         modelCallsUsed: state.budget.modelCallsUsed + modelCallsUsed,
@@ -862,13 +870,6 @@ function createVerifyBuyingSignalsNode(
       });
     }
 
-    await reportProgress(dependencies, {
-      stage: "READY_FOR_REVIEW",
-      status: "PAUSED_FOR_REVIEW",
-      message: `Discovery complete: ${state.discoveredAccounts.length} account(s) ready for review.`,
-      counts: { searches: state.budget.searchesUsed, pages: state.budget.pagesUsed, sources: state.fetchedSources.length, accounts: state.discoveredAccounts.length, signals: buyingSignals.length },
-    });
-
     return {
       buyingSignals,
       buyingSignalIds,
@@ -876,6 +877,159 @@ function createVerifyBuyingSignalsNode(
         ...state.budget,
         modelCallsUsed: state.budget.modelCallsUsed + modelCallsUsed,
       },
+      warnings,
+      errors,
+      status: "RUNNING" as const,
+      discoveryStage: "CONTACT_PLAN" as const,
+    };
+  };
+}
+
+const CONTACT_LINK_PATTERN = /(?:contact|partnership|commercial|business|event|venue|programming|licen[sc]ing|sponsorship|corporate|booking|team|leadership|management|about|press|media)/i;
+
+function sameOfficialSite(account: DiscoveredAccount, rawUrl: string): boolean {
+  try {
+    const accountDomain = getDomain(new URL(account.officialDomain ?? account.website ?? "").hostname);
+    const candidateDomain = getDomain(new URL(rawUrl).hostname);
+    return Boolean(accountDomain && candidateDomain && accountDomain === candidateDomain);
+  } catch {
+    return false;
+  }
+}
+
+function contactLinkRank(rawUrl: string, anchorText = ""): number {
+  const value = `${rawUrl} ${anchorText}`.toLowerCase();
+  if (/(partnership|commercial|business|programming|licen|sponsor|venue)/.test(value)) return 100;
+  if (/(event|booking|corporate|team|leadership|management)/.test(value)) return 80;
+  if (/(contact|about|press|media)/.test(value)) return 60;
+  return 0;
+}
+
+function contactFallbackUrls(account: DiscoveredAccount): string[] {
+  try {
+    const base = new URL(account.officialDomain ?? account.website ?? "");
+    return ["/contact", "/contact-us"].map((path) => new URL(path, base).toString());
+  } catch {
+    return [];
+  }
+}
+
+function createContactEnrichmentNode(
+  dependencies: SalesMissionDiscoveryDependencies,
+): GraphNode<SalesMissionDiscoveryGraphStateType> {
+  const searchProvider = dependencies.searchProvider ?? duckDuckGoSearchProvider;
+  const fetchSource = dependencies.fetchSource ?? (async (input) => {
+    const result = await safeFetchTool.invoke(input);
+    return SafeFetchResultSchema.parse(result);
+  });
+
+  return async (state) => {
+    const selectedKeys = dependencies.contactAccountKeys ? new Set(dependencies.contactAccountKeys) : undefined;
+    const accounts = [...state.discoveredAccounts];
+    const contactSources: FetchedSourceReference[] = [];
+    const contactSearchResults: SearchResult[] = [];
+    const warnings: Array<z.infer<typeof GraphWarningSchema>> = [];
+    const errors: Array<z.infer<typeof GraphErrorSchema>> = [];
+    const knownUrls = new Set(state.fetchedSources.map((source) => canonicaliseUrl(source.finalUrl)).filter((url): url is string => Boolean(url)));
+    const searchBudgetRemaining = Math.max(0, state.budget.maxSearches - state.budget.searchesUsed);
+    const pageBudgetRemaining = Math.max(0, state.budget.maxPages - state.budget.pagesUsed);
+    let contactSearchesUsed = 0;
+    let contactPagesUsed = 0;
+
+    await reportProgress(dependencies, {
+      stage: "CONTACT_PLAN",
+      status: "RUNNING",
+      message: `Planning bounded public-contact research for ${accounts.length} account(s).`,
+      detail: "Official-site links are preferred; focused same-site search and two deterministic fallbacks are secondary.",
+      counts: { searches: state.budget.searchesUsed, pages: state.budget.pagesUsed, accounts: accounts.length },
+    });
+
+    for (const [accountIndex, account] of accounts.entries()) {
+      if (selectedKeys && !selectedKeys.has(account.accountKey)) continue;
+      const accountSources = [...state.fetchedSources, ...contactSources].filter((source) => sameOfficialSite(account, source.finalUrl));
+      const linkCandidates = accountSources.flatMap((source) => (source.links ?? [])
+        .filter((link) => link.sameSite && sameOfficialSite(account, link.url) && CONTACT_LINK_PATTERN.test(`${link.url} ${link.anchorText}`))
+        .map((link) => ({ url: link.url, rank: contactLinkRank(link.url, link.anchorText) })));
+      const candidateUrls = [...new Map(linkCandidates.sort((left, right) => right.rank - left.rank).map((candidate) => [canonicaliseUrl(candidate.url) ?? candidate.url, candidate.url])).values()];
+
+      await reportProgress(dependencies, {
+        stage: "CONTACT_SOURCE_DISCOVERY",
+        status: "RUNNING",
+        message: `Finding official contact pages for ${account.companyName}.`,
+        detail: candidateUrls.length > 0 ? `${candidateUrls.length} linked route candidate(s) found.` : "No useful same-site link was found yet.",
+        counts: { searches: state.budget.searchesUsed + contactSearchesUsed, pages: state.budget.pagesUsed + contactPagesUsed, accounts: accountIndex + 1, contacts: contactSources.length },
+      });
+
+      if (candidateUrls.length === 0 && contactSearchesUsed < searchBudgetRemaining) {
+        let hostname = "";
+        try { hostname = new URL(account.officialDomain ?? account.website ?? "").hostname; } catch { hostname = ""; }
+        if (hostname) {
+          const query = `site:${hostname} contact partnerships commercial ${account.possibleBuyerRoles[0] ?? state.brief.buyerRoles[0]}`.slice(0, 500);
+          contactSearchesUsed += 1;
+          try {
+            const rawResults = await searchProvider.search(SearchProviderRequestSchema.parse({ query, countryOrLocale: state.brief.geographies.join(", "), freshnessWindowDays: state.brief.freshnessWindowDays, resultLimit: 10, missionRunId: state.missionRunId }));
+            const parsedResults = z.array(SearchResultSchema).safeParse(rawResults);
+            const officialResults = parsedResults.success ? uniqueSearchResults(parsedResults.data).filter((result) => sameOfficialSite(account, result.url) && !isLikelyNonFirstPartySource(result.url)) : [];
+            contactSearchResults.push(...officialResults);
+            candidateUrls.push(...officialResults.map((result) => result.url));
+            await reportSearchProgress(dependencies, { query, queryIndex: state.searchResults.length + contactSearchesUsed, status: "COMPLETED", resultCount: officialResults.length, searchesUsed: state.budget.searchesUsed + contactSearchesUsed, searchResults: uniqueSearchResults([...state.searchResults, ...contactSearchResults]).slice(0, 1000) });
+          } catch (error) {
+            errors.push({ code: "CONTACT_SEARCH_FAILED", message: `Focused contact search failed for ${account.companyName}: ${errorMessage(error)}`, retryable: true });
+            await reportSearchProgress(dependencies, { query, queryIndex: state.searchResults.length + contactSearchesUsed, status: "FAILED", resultCount: 0, searchesUsed: state.budget.searchesUsed + contactSearchesUsed, searchResults: uniqueSearchResults([...state.searchResults, ...contactSearchResults]).slice(0, 1000), detail: errorMessage(error) });
+          }
+        }
+      } else if (candidateUrls.length === 0 && contactSearchesUsed >= searchBudgetRemaining) {
+        warnings.push({ code: "CONTACT_SEARCH_BUDGET_REACHED", message: `No focused contact search remained for ${account.companyName}.` });
+      }
+
+      if (candidateUrls.length === 0) candidateUrls.push(...contactFallbackUrls(account));
+      const selectedUrls = [...new Set(candidateUrls)].filter((url) => !knownUrls.has(canonicaliseUrl(url) ?? url)).slice(0, 3);
+      if (pageBudgetRemaining - contactPagesUsed < selectedUrls.length) {
+        warnings.push({ code: "CONTACT_PAGE_BUDGET_REACHED", message: `Contact-page fetching stopped before all candidates for ${account.companyName} because the mission page budget is exhausted.` });
+      }
+
+      for (const rawUrl of selectedUrls.slice(0, Math.max(0, pageBudgetRemaining - contactPagesUsed))) {
+        const sourceUrl = canonicaliseUrl(rawUrl);
+        if (!sourceUrl || !sameOfficialSite(account, sourceUrl)) continue;
+        contactPagesUsed += 1;
+        try {
+          const result = SafeFetchResultSchema.parse(await fetchSource({ url: sourceUrl }));
+          const source = FetchedSourceReferenceSchema.parse({ sourceUrl, finalUrl: result.finalUrl, status: result.status, mimeType: result.mimeType, title: result.title, readableExcerpt: boundedSourceExcerpt(result.readableText), byteCount: result.byteCount, contentHash: result.contentHash, retrievedAt: result.retrievedAt, redirectCount: result.redirectCount, searchQuery: `contact:${account.accountKey}`, canonicalUrl: result.canonicalUrl, links: result.links, publicEmailHints: result.publicEmailHints, publicPhoneHints: result.publicPhoneHints });
+          contactSources.push(source);
+          knownUrls.add(canonicaliseUrl(source.finalUrl) ?? source.finalUrl);
+          await reportProgress(dependencies, { stage: "CONTACT_SOURCE_FETCH", status: "RUNNING", message: `Fetched contact source ${contactPagesUsed} of the reserved contact-page budget.`, detail: source.finalUrl, counts: { searches: state.budget.searchesUsed + contactSearchesUsed, pages: state.budget.pagesUsed + contactPagesUsed, accounts: accountIndex + 1, contacts: contactSources.length } });
+        } catch (error) {
+          const code = errorCode(error);
+          errors.push({ code: `CONTACT_SOURCE_${code}`, message: `Contact source fetch failed for ${sourceUrl}: ${errorMessage(error)}`, retryable: isRetryableFetchError(code) });
+        }
+      }
+
+      const routes = deriveContactRoutes(account, [...state.fetchedSources, ...contactSources], state.brief.buyerRoles);
+      const hasPublicEmail = routes.some((route) => route.routeType === "PUBLIC_EMAIL" && route.isUsableForSales);
+      const hasUsableRoute = routes.some((route) => route.isUsableForSales);
+      const emailRequired = requiresPublicEmail(state.brief);
+      accounts[accountIndex] = DiscoveredAccountSchema.parse({
+        ...account,
+        contactRequirementStatus: emailRequired ? (hasPublicEmail ? "MET" : "NOT_MET") : (hasUsableRoute ? "MET" : "NOT_MET"),
+        contactSearchSummary: emailRequired && !hasPublicEmail
+          ? `No verified public email was found after one focused search and ${Math.min(3, selectedUrls.length)} official-page attempt(s).`
+          : hasUsableRoute ? `${routes.filter((route) => route.isUsableForSales).length} verified public contact route(s) found.` : "No verified public contact route was found after bounded contact research.",
+      });
+      await reportProgress(dependencies, { stage: "CONTACT_VERIFICATION", status: "RUNNING", message: `Verified contact routes for ${account.companyName}.`, detail: accounts[accountIndex].contactSearchSummary, counts: { searches: state.budget.searchesUsed + contactSearchesUsed, pages: state.budget.pagesUsed + contactPagesUsed, accounts: accountIndex + 1, contacts: routes.length } });
+    }
+
+    for (const account of accounts) {
+      if (requiresPublicEmail(state.brief) && account.contactRequirementStatus === "NOT_MET") warnings.push({ code: "CONTACT_REQUIREMENT_NOT_MET", message: `${account.companyName} remains visible for audit, but does not satisfy the public-email requirement.` });
+    }
+    await reportProgress(dependencies, { stage: "SCORE_RECALCULATION", status: "RUNNING", message: "Recalculating deterministic reachability after contact enrichment.", counts: { searches: state.budget.searchesUsed + contactSearchesUsed, pages: state.budget.pagesUsed + contactPagesUsed, accounts: accounts.length, contacts: contactSources.length } });
+
+    return {
+      searchResults: contactSearchResults,
+      fetchedSources: contactSources,
+      discoveredAccounts: accounts,
+      accountIds: state.accountIds,
+      evidenceIds: contactSources.map((source) => `source:${source.contentHash}`),
+      budget: { ...state.budget, searchesUsed: state.budget.searchesUsed + contactSearchesUsed, pagesUsed: state.budget.pagesUsed + contactPagesUsed, contactSearchesUsed: (state.budget.contactSearchesUsed ?? 0) + contactSearchesUsed, contactPagesUsed: (state.budget.contactPagesUsed ?? 0) + contactPagesUsed },
       warnings,
       errors,
       status: "RUNNING" as const,
@@ -919,11 +1073,13 @@ export function createSalesMissionDiscoveryGraph(
     .addNode("fetch_official_sources", createFetchOfficialSourcesNode(dependencies))
     .addNode("extract_accounts", createExtractAccountsNode(dependencies))
     .addNode("verify_buying_signals", createVerifyBuyingSignalsNode(dependencies))
+    .addNode("contact_enrichment", createContactEnrichmentNode(dependencies))
     .addEdge(START, "search_provider")
     .addEdge("search_provider", "fetch_official_sources")
     .addEdge("fetch_official_sources", "extract_accounts")
     .addEdge("extract_accounts", "verify_buying_signals")
-    .addEdge("verify_buying_signals", END);
+    .addEdge("verify_buying_signals", "contact_enrichment")
+    .addEdge("contact_enrichment", END);
 
   return dependencies.checkpointer
     ? graph.compile({ checkpointer: dependencies.checkpointer, interruptAfter: ["verify_buying_signals"] })

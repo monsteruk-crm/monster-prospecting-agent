@@ -143,14 +143,14 @@ describe("sales mission discovery graph", () => {
 
     expect(events.filter((event) => event.startsWith("search:")).length).toBe(2);
     expect(events.findIndex((event) => event.startsWith("fetch:"))).toBe(2);
-    expect(events.at(-1)).toBe("fetch:https://acme.org/programme");
+    expect(events.at(-1)).toBe("fetch:https://acme.org/contact");
     expect(state.searchResults).toHaveLength(1);
-    expect(state.fetchedSources).toHaveLength(1);
+    expect(state.fetchedSources).toHaveLength(2);
     expect(state.fetchedSources[0].readableExcerpt).toBe("Official programme evidence");
     expect(state.discoveryStage).toBe("READY_FOR_REVIEW");
     expect(state.budget.searchesUsed).toBe(2);
-    expect(state.budget.pagesUsed).toBe(1);
-    expect(state.evidenceIds).toEqual([`source:${contentHash}`]);
+    expect(state.budget.pagesUsed).toBe(2);
+    expect(state.evidenceIds).toHaveLength(2);
     expect(state.discoveredAccounts[0].companyName).toBe("Acme Events");
     expect(state.buyingSignals[0]).toMatchObject({
       signalType: "NEW_PROGRAMME",
@@ -249,11 +249,11 @@ describe("sales mission discovery graph", () => {
       ...extractionDependencies(),
     });
 
-    expect(state.discoveredAccounts).toEqual([]);
-    expect(state.accountExtractionCandidates).toEqual([]);
+    expect(state.discoveredAccounts).toHaveLength(1);
+    expect(state.accountExtractionCandidates).toHaveLength(1);
     expect(state.warnings).toContainEqual({
-      code: "ACCOUNT_FILTERED_NO_PUBLIC_EMAIL",
-      message: "Filtered 1 extracted account(s) because the brief requires a publicly confirmed email address.",
+      code: "CONTACT_REQUIREMENT_NOT_MET",
+      message: "Acme Events remains visible for audit, but does not satisfy the public-email requirement.",
     });
   });
 
@@ -271,12 +271,12 @@ describe("sales mission discovery graph", () => {
     };
     const state = await discoverSalesMission(prepared, {
       searchProvider,
-      fetchSource: vi.fn(async ({ url }: { url: string }) => fetchedSource(url, `${"x".repeat(700)} Contact partnerships@example.org for enquiries.`)),
+      fetchSource: vi.fn(async ({ url }: { url: string }) => fetchedSource(url, `${"x".repeat(700)} Contact partnerships@acme.org for enquiries.`)),
       ...extractionDependencies(),
     });
 
     expect(state.discoveredAccounts).toHaveLength(1);
-    expect(state.accountExtractionCandidates[0].sourceExcerpt).toContain("partnerships@example.org");
+    expect(state.accountExtractionCandidates[0].sourceExcerpt).toContain("partnerships@acme.org");
   });
 
   test("derives freshness only from a source-supported event date", async () => {

@@ -80,6 +80,32 @@ describe("safeFetch", () => {
     );
   });
 
+  test("preserves bounded contact navigation, mailto, tel and JSON-LD metadata", async () => {
+    const result = await safeFetch(
+      { url: "https://acme.org/" },
+      {
+        fetchImplementation: vi.fn(async () => htmlResponse(`
+          <html><head><link rel="canonical" href="https://www.acme.org/"><script type="application/ld+json">{"@type":"Organization","email":"hello@acme.org","contactPoint":{"telephone":"+44 20 1234 5678"}}</script></head>
+          <body><a href="/partnerships">Partnerships</a><a href="mailto:partnerships@acme.org">Email us</a><a href="tel:+442012345678">Call</a><a href="https://linkedin.com/company/acme">Team</a></body></html>
+        `)),
+        resolveAddresses: publicAddresses,
+      },
+    );
+
+    expect(result.canonicalUrl).toBe("https://www.acme.org/");
+    expect(result.links).toEqual(expect.arrayContaining([
+      expect.objectContaining({ url: "https://acme.org/partnerships", sameSite: true }),
+      expect.objectContaining({ url: "https://linkedin.com/company/acme", sameSite: false }),
+    ]));
+    expect(result.publicEmailHints).toEqual(expect.arrayContaining([
+      expect.objectContaining({ email: "partnerships@acme.org", sourceKind: "MAILTO" }),
+      expect.objectContaining({ email: "hello@acme.org", sourceKind: "JSON_LD" }),
+    ]));
+    expect(result.publicPhoneHints).toEqual(expect.arrayContaining([
+      expect.objectContaining({ phone: "+442012345678", sourceKind: "TEL" }),
+    ]));
+  });
+
   test("revalidates every redirect and blocks a private destination", async () => {
     const fetchImplementation = vi.fn(async () =>
       new Response(null, {

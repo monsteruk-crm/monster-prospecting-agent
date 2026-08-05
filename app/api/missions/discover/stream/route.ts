@@ -1,6 +1,7 @@
 import { SalesMissionBriefSchema } from "@/lib/sales/mission-schema";
 import { executeDiscoveryRun } from "@/lib/graph/discovery-runner";
 import { DatabaseConfigurationError } from "@/lib/db/client";
+import { logRouteCompleted, logRouteFailure, logRouteStart, requestLogContext } from "@/lib/observability/runtime-logger";
 
 export const runtime = "nodejs";
 
@@ -10,6 +11,9 @@ type StreamMessage = {
 };
 
 export async function POST(request: Request) {
+  const startedAt = Date.now();
+  const logContext = requestLogContext(request, "/api/missions/discover/stream");
+  logRouteStart(logContext);
   let payload: unknown;
   try {
     payload = await request.json();
@@ -59,6 +63,7 @@ export async function POST(request: Request) {
               send({ type: "search_progress", ...event });
             },
           });
+          logRouteCompleted(logContext, startedAt, { missionRunId: result.discovered.missionRunId, accountCount: result.discovered.discoveredAccounts.length, searchCount: result.discovered.budget.searchesUsed, pageCount: result.discovered.budget.pagesUsed });
           send({
             type: "completed",
             missionId: result.discovered.missionId,
@@ -69,6 +74,7 @@ export async function POST(request: Request) {
             signalCount: result.discovered.buyingSignals.length,
           });
         } catch (error) {
+          logRouteFailure(logContext, startedAt, error);
           send({
             type: "error",
             error: {
@@ -78,6 +84,7 @@ export async function POST(request: Request) {
                 : error instanceof Error && error.message === "MISSION_PREPARATION_INCOMPLETE"
                   ? "The mission preparation graph did not produce discovery inputs."
                   : "The bounded discovery run could not be completed and persisted.",
+              requestId: logContext.requestId,
             },
           });
         } finally {

@@ -12,6 +12,7 @@ export const MissionProgressCountsSchema = z.object({
   sources: z.number().int().nonnegative().optional(),
   accounts: z.number().int().nonnegative().optional(),
   signals: z.number().int().nonnegative().optional(),
+  contacts: z.number().int().nonnegative().optional(),
 });
 
 export const MissionProgressEventSchema = z.object({

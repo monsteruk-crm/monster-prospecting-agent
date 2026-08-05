@@ -131,7 +131,7 @@ export async function getMissionRunDossier(
       buyingSignals: true,
       review: true,
       auditEvents: {
-        where: { eventType: { in: ["MISSION_PROGRESS", "MISSION_SEARCH_PROGRESS"] } },
+        where: { eventType: { in: ["MISSION_PROGRESS", "MISSION_SEARCH_PROGRESS", "CONTACT_ENRICHMENT_COMPLETED"] } },
         orderBy: { occurredAt: "asc" },
       },
     },

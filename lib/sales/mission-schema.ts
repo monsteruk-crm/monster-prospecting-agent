@@ -1,5 +1,11 @@
 import { z } from "zod";
 
+import {
+  PublicEmailHintSchema,
+  PublicPageLinkSchema,
+  PublicPhoneHintSchema,
+} from "@/lib/tools/safe-fetch";
+
 const nonEmptyText = z.string().trim().min(1);
 const boundedList = z.array(nonEmptyText).max(20);
 
@@ -108,6 +114,10 @@ export const FetchedSourceReferenceSchema = z.object({
   retrievedAt: z.string().datetime(),
   redirectCount: z.number().int().nonnegative().max(3),
   searchQuery: nonEmptyText.max(500),
+  canonicalUrl: z.string().url().optional(),
+  links: z.array(PublicPageLinkSchema).max(100).optional(),
+  publicEmailHints: z.array(PublicEmailHintSchema).max(20).optional(),
+  publicPhoneHints: z.array(PublicPhoneHintSchema).max(20).optional(),
 });
 
 export const EvidenceStateSchema = z.enum([
@@ -205,6 +215,12 @@ export const DiscoveryStageSchema = z.enum([
   "OFFICIAL_SOURCE_FETCH",
   "ACCOUNT_EXTRACTION",
   "BUYING_SIGNAL_VERIFICATION",
+  "CONTACT_PLAN",
+  "CONTACT_SOURCE_DISCOVERY",
+  "CONTACT_SOURCE_FETCH",
+  "CONTACT_EXTRACTION",
+  "CONTACT_VERIFICATION",
+  "SCORE_RECALCULATION",
   "READY_FOR_REVIEW",
 ]);
 
@@ -217,6 +233,9 @@ export const BudgetSchema = z.object({
   pagesUsed: z.number().int().nonnegative(),
   modelCallsUsed: z.number().int().nonnegative(),
   estimatedCostUsd: z.number().nonnegative(),
+  contactSearchesUsed: z.number().int().nonnegative().optional(),
+  contactPagesUsed: z.number().int().nonnegative().optional(),
+  contactModelCallsUsed: z.number().int().nonnegative().optional(),
 });
 
 export const DiscoveredAccountSchema = z.object({
@@ -232,6 +251,8 @@ export const DiscoveredAccountSchema = z.object({
   possibleBuyerRoles: z.array(nonEmptyText),
   discoveryEvidenceIds: z.array(nonEmptyText),
   unresolvedQuestions: z.array(nonEmptyText),
+  contactRequirementStatus: z.enum(["NOT_EVALUATED", "MET", "NOT_MET"]).optional(),
+  contactSearchSummary: z.string().trim().max(500).optional(),
 });
 
 export const VerifiedBuyingSignalSchema = z.object({

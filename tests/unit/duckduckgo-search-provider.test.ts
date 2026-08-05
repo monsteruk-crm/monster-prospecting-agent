@@ -23,11 +23,14 @@ function htmlResponse(body: string, status = 200): Response {
 
 describe("DuckDuckGoSearchProvider", () => {
   test("parses HTML results and unwraps DuckDuckGo redirect URLs", async () => {
-    const fetchImplementation = vi.fn(async (input: RequestInfo | URL) => {
+    const fetchImplementation = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
       const url = new URL(String(input));
-      expect(url.searchParams.get("q")).toBe(request.query);
-      expect(url.searchParams.get("kl")).toBe("wt-wt");
-      expect(url.searchParams.get("kp")).toBe("1");
+      expect(url.pathname).toBe("/html/");
+      expect(init?.method).toBe("POST");
+      const body = new URLSearchParams(String(init?.body));
+      expect(body.get("q")).toBe(request.query);
+      expect(body.get("kl")).toBe("wt-wt");
+      expect(body.get("kp")).toBe("1");
       return htmlResponse(`
         <div class="result results_links">
           <h2 class="result__title">
