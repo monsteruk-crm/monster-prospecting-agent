@@ -68,6 +68,7 @@ The discovery route uses the LangGraph Postgres checkpointer and interrupts afte
 
 - `GET /api/runs/:missionRunId` returns the persisted mission, run, account dossiers, score snapshots, contact routes, evidence, signals, first-move drafts and review state.
 - `POST /api/runs/:missionRunId/review` accepts `{ action, reviewer, note }`, where `action` is `APPROVE`, `REJECT`, `EDIT`, `DUPLICATE` or `DO_NOT_CONTACT`. Decisions are audited. Non-edit decisions resume the checkpointed graph and complete the run.
+- `POST /api/runs/:missionRunId/research-gap` accepts `{ question, accountId?, reviewer? }`, records a structured `CHANGES_REQUESTED` review note and leaves the run available for a follow-up research implementation. It does not send outreach or write to CRM.
 - `POST /api/runs/:missionRunId/resume` resumes a checkpointed run explicitly.
 
 Scores are deterministic snapshots. Accounts without a usable public contact route are capped at 70, and the dossier exposes the cap rather than implying contactability.

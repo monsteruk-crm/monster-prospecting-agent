@@ -19,6 +19,27 @@ export const ReviewDecisionInputSchema = z.object({
   note: z.string().trim().max(2000).default(""),
 });
 
+export const ResearchGapInputSchema = z.object({
+  question: z.string().trim().min(1).max(1000),
+  accountId: z.string().trim().min(1).max(300).optional(),
+  reviewer: z.string().trim().min(1).max(120).default("Nick"),
+});
+
+export type ResearchGapInput = z.infer<typeof ResearchGapInputSchema>;
+
+export async function persistResearchGap(
+  missionRunId: string,
+  rawInput: unknown,
+  client: PersistenceClient = getPrismaClient(),
+) {
+  const input = ResearchGapInputSchema.parse(rawInput);
+  return persistReviewDecision(missionRunId, {
+    action: "EDIT",
+    reviewer: input.reviewer,
+    note: `RESEARCH_GAP${input.accountId ? ` [${input.accountId}]` : ""}: ${input.question}`,
+  }, client);
+}
+
 export type ReviewDecisionInput = z.infer<typeof ReviewDecisionInputSchema>;
 type PersistenceClient = PrismaClient | Prisma.TransactionClient;
 

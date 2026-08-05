@@ -13,6 +13,7 @@
     "test:watch": "vitest",
     "test:e2e": "playwright test",
     "knowledge:ingest": "tsx scripts/ingest-knowledge.ts",
+    "knowledge:evaluate": "tsx scripts/evaluate-knowledge.ts",
     "prisma:generate": "prisma generate",
     "prisma:migrate": "prisma migrate dev",
     "prisma:studio": "prisma studio"

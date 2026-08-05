@@ -22,7 +22,7 @@ describe("sales mission preparation graph", () => {
     expect(state.missionRunId).toBe("run-test");
     expect(state.graphVersion).toBe(SALES_MISSION_GRAPH_VERSION);
     expect(state.status).toBe("READY_FOR_DISCOVERY");
-    expect(state.targetProfile?.maximumProspects).toBe(3);
+    expect(state.targetProfile?.maximumProspects).toBe(5);
     expect(state.searchStrategy?.queryFamilies.length).toBeGreaterThan(0);
     expect(state.searchStrategy?.totalMaxQueries).toBeLessThanOrEqual(12);
     expect(state.discoveredAccounts).toEqual([]);

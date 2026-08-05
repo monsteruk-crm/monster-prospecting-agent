@@ -32,7 +32,7 @@ const MissionLimitsSchema = z.object({
   maxPages: z.number().int().min(1).max(100).default(20),
   maxModelCalls: z.number().int().min(1).max(100).default(12),
   maxCostUsd: z.number().min(0).max(100).default(2),
-  maxCandidateAccounts: z.number().int().min(1).max(3).default(3),
+  maxCandidateAccounts: z.number().int().min(1).max(5).default(5),
 });
 
 export const SalesMissionBriefSchema = z.object({
@@ -60,7 +60,7 @@ export const TargetProfileSchema = z.object({
   targetBuyerRoles: z.array(nonEmptyText).min(1),
   commercialScaleIndicators: z.array(nonEmptyText).min(1),
   freshnessWindowDays: z.number().int().positive(),
-  maximumProspects: z.number().int().min(1).max(3),
+    maximumProspects: z.number().int().min(1).max(5),
 });
 
 export const QueryFamilyKindSchema = z.enum([

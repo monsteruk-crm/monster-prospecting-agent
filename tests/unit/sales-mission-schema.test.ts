@@ -12,19 +12,25 @@ describe("sales mission brief schema", () => {
     });
 
     expect(brief.productFocus).toBe("THE_MONSTER");
-    expect(brief.limits.maxCandidateAccounts).toBe(3);
+    expect(brief.limits.maxCandidateAccounts).toBe(5);
     expect(brief.freshnessWindowDays).toBe(365);
   });
 
-  test("never permits more than three candidate accounts in Act 1", () => {
-    expect(() =>
-      SalesMissionBriefSchema.parse({
-        name: "Over-sized hunt",
-        geographies: ["Germany"],
-        accountCategories: ["FESTIVAL_PRODUCER"],
-        buyerRoles: ["Event Director"],
-        limits: { maxCandidateAccounts: 4 },
-      }),
-    ).toThrow();
+  test("permits the five-account MVP target but remains bounded", () => {
+    const brief = SalesMissionBriefSchema.parse({
+      name: "Five-account hunt",
+      geographies: ["Germany"],
+      accountCategories: ["FESTIVAL_PRODUCER"],
+      buyerRoles: ["Event Director"],
+      limits: { maxCandidateAccounts: 5 },
+    });
+    expect(brief.limits.maxCandidateAccounts).toBe(5);
+    expect(() => SalesMissionBriefSchema.parse({
+      name: "Over-sized hunt",
+      geographies: ["Germany"],
+      accountCategories: ["FESTIVAL_PRODUCER"],
+      buyerRoles: ["Event Director"],
+      limits: { maxCandidateAccounts: 6 },
+    })).toThrow();
   });
 });

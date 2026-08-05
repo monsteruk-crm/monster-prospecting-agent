@@ -1,0 +1,110 @@
+[
+  {
+    "id": "monster-overview",
+    "retrievalQuery": "what is The Monster event experience",
+    "expectedSectionIds": ["positioning-addendum:experience-description", "positioning-addendum:when-asked-what-is-the-monster"],
+    "firstMoveInput": {
+      "missionRunId": "eval-monster-overview",
+      "accountId": "eval-account-overview",
+      "companyName": "Example Event Promoter",
+      "productFocus": "The Monster",
+      "relevanceHypothesis": "The promoter may want a memorable event experience for ticketed audiences.",
+      "contactRoutes": [{"targetRole": "Managing Director", "sourceEvidenceIds": ["evidence-overview"], "routeType": "ROLE_ONLY", "roleConfidence": "HIGH", "dataFreshness": "UNKNOWN"}],
+      "signals": [{"summary": "The organisation is planning a public event.", "verified": true, "freshness": "CURRENT", "evidenceExcerpt": "The event is listed on the official calendar.", "evidenceId": "evidence-overview"}],
+      "evidence": [{"id": "evidence-overview", "finalUrl": "https://example.com/events", "readableExcerpt": "The official event calendar lists a public event."}]
+    },
+    "firstMoveLabel": {"expectedChannel": "ROLE_ROUTE", "expectedEvidenceIds": ["evidence-overview"], "requiredTerms": ["event"]},
+    "humanJudgment": {"status": "PENDING", "reviewer": null, "usefulnessScore": null, "groundingScore": null, "notes": "Review whether the draft is a credible opening for the public event."}
+  },
+  {
+    "id": "event-format",
+    "retrievalQuery": "event format options audience experience",
+    "expectedSectionIds": ["positioning-addendum:event-format-options"],
+    "firstMoveInput": {
+      "missionRunId": "eval-event-format",
+      "accountId": "eval-account-format",
+      "companyName": "Example Festival Operator",
+      "productFocus": "The Monster",
+      "relevanceHypothesis": "The operator may need an interactive format that can fit a festival programme.",
+      "contactRoutes": [{"targetRole": "Programme Director", "sourceEvidenceIds": ["evidence-format"], "routeType": "ROLE_ONLY", "roleConfidence": "MEDIUM", "dataFreshness": "UNKNOWN"}],
+      "signals": [{"summary": "The operator announced a new festival programme.", "verified": true, "freshness": "RECENT", "evidenceExcerpt": "The official programme announcement describes the new festival.", "evidenceId": "evidence-format"}],
+      "evidence": [{"id": "evidence-format", "finalUrl": "https://example.com/festival", "readableExcerpt": "The official programme announcement describes the new festival."}]
+    },
+    "firstMoveLabel": {"expectedChannel": "ROLE_ROUTE", "expectedEvidenceIds": ["evidence-format"], "requiredTerms": ["festival"]},
+    "humanJudgment": {"status": "PENDING", "reviewer": null, "usefulnessScore": null, "groundingScore": null, "notes": "Review whether the draft makes a useful festival-programme opening."}
+  },
+  {
+    "id": "venue-and-staffing",
+    "retrievalQuery": "venue fit access space staffing event manager",
+    "expectedSectionIds": ["authoritative-checklist:c-venue-fit-qualification", "authoritative-checklist:d-staffing-reality"],
+    "firstMoveInput": {
+      "missionRunId": "eval-venue-staffing",
+      "accountId": "eval-account-venue",
+      "companyName": "Example Venue Group",
+      "productFocus": "The Monster",
+      "relevanceHypothesis": "The venue group may need to confirm space, access and staffing before considering an installation.",
+      "contactRoutes": [{"targetRole": "Operations Director", "sourceEvidenceIds": ["evidence-venue"], "routeType": "ROLE_ONLY", "roleConfidence": "HIGH", "dataFreshness": "UNKNOWN"}],
+      "signals": [{"summary": "The venue group published an operations expansion notice.", "verified": true, "freshness": "CURRENT", "evidenceExcerpt": "The official notice describes an expansion of event operations.", "evidenceId": "evidence-venue"}],
+      "evidence": [{"id": "evidence-venue", "finalUrl": "https://example.com/operations", "readableExcerpt": "The official notice describes an expansion of event operations."}]
+    },
+    "firstMoveLabel": {"expectedChannel": "ROLE_ROUTE", "expectedEvidenceIds": ["evidence-venue"], "requiredTerms": ["space"]},
+    "humanJudgment": {"status": "PENDING", "reviewer": null, "usefulnessScore": null, "groundingScore": null, "notes": "Review whether the draft would help a salesperson make a credible first move."}
+  },
+  {
+    "id": "paraphrase-paid-attraction",
+    "retrievalQuery": "large paid visitor experiences",
+    "expectedSectionIds": ["positioning-addendum:core-product-story", "positioning-addendum:audience-profile-and-appeal"],
+    "firstMoveInput": null,
+    "firstMoveLabel": null,
+    "humanJudgment": {"status": "PENDING", "reviewer": null, "usefulnessScore": null, "groundingScore": null, "notes": "Test semantic equivalence with ticketed attractions and visitor experiences."}
+  },
+  {
+    "id": "paraphrase-touring-operator",
+    "retrievalQuery": "multi-city touring operator",
+    "expectedSectionIds": ["positioning-addendum:track-record-and-proof-points"],
+    "firstMoveInput": null,
+    "firstMoveLabel": null,
+    "humanJudgment": {"status": "PENDING", "reviewer": null, "usefulnessScore": null, "groundingScore": null, "notes": "Test whether operating footprint language retrieves international proof."}
+  },
+  {
+    "id": "product-comparison",
+    "retrievalQuery": "Mega Bounce House versus The Monster product comparison",
+    "expectedSectionIds": ["positioning-addendum:choose-the-monster-when-the-lead-wants", "positioning-addendum:choose-mega-bounce-house-when-the-lead-wants"],
+    "firstMoveInput": null,
+    "firstMoveLabel": null,
+    "humanJudgment": {"status": "PENDING", "reviewer": null, "usefulnessScore": null, "groundingScore": null, "notes": "Confirm that comparison context remains product-specific and does not override checklist rules."}
+  },
+  {
+    "id": "promoter-responsibilities",
+    "retrievalQuery": "what the promoter must provide for the event",
+    "expectedSectionIds": ["authoritative-checklist:c-venue-fit-qualification", "authoritative-checklist:d-staffing-reality"],
+    "firstMoveInput": null,
+    "firstMoveLabel": null,
+    "humanJudgment": {"status": "PENDING", "reviewer": null, "usefulnessScore": null, "groundingScore": null, "notes": "Check that operational responsibility passages outrank positioning copy."}
+  },
+  {
+    "id": "international-proof",
+    "retrievalQuery": "international proof points",
+    "expectedSectionIds": ["positioning-addendum:track-record-and-proof-points"],
+    "firstMoveInput": null,
+    "firstMoveLabel": null,
+    "humanJudgment": {"status": "PENDING", "reviewer": null, "usefulnessScore": null, "groundingScore": null, "notes": "Assess whether the retrieved proof is sufficient for a first-move sales angle."}
+  },
+  {
+    "id": "family-leisure-fit",
+    "retrievalQuery": "family leisure programming",
+    "expectedSectionIds": ["positioning-addendum:audience-and-event-fit"],
+    "firstMoveInput": null,
+    "firstMoveLabel": null,
+    "humanJudgment": {"status": "PENDING", "reviewer": null, "usefulnessScore": null, "groundingScore": null, "notes": "Assess whether the retrieved audience context supports a family attraction fit decision."}
+  },
+  {
+    "id": "no-suitable-context",
+    "retrievalQuery": "quantum accounting satellite telemetry",
+    "expectedSectionIds": [],
+    "allowNoResult": true,
+    "firstMoveInput": null,
+    "firstMoveLabel": null,
+    "humanJudgment": {"status": "PENDING", "reviewer": null, "usefulnessScore": null, "groundingScore": null, "notes": "No result is preferred to fabricated Monster context."}
+  }
+]
