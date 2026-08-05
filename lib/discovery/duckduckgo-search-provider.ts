@@ -12,6 +12,7 @@ import {
   SearchResultSchema,
   type SearchResult,
 } from "@/lib/sales/mission-schema";
+import { bingHtmlSearchProvider } from "@/lib/discovery/bing-search-provider";
 
 export const DUCKDUCKGO_SEARCH_ENDPOINT = "https://html.duckduckgo.com/html/";
 
@@ -59,6 +60,7 @@ export interface DuckDuckGoSearchProviderDependencies {
   maxBytes?: number;
   maxRedirects?: number;
   timeoutMs?: number;
+  fallbackProvider?: SearchProvider | null;
 }
 
 function decodeHtmlEntities(value: string): string {
@@ -241,6 +243,8 @@ export class DuckDuckGoSearchProvider implements SearchProvider {
 
     const endpoint = new URL(DUCKDUCKGO_SEARCH_ENDPOINT);
 
+    endpoint.searchParams.set("q", request.query);
+    endpoint.searchParams.set("s", "0");
     let currentUrl = await validatePublicUrl(endpoint.toString(), this.dependencies.resolveAddresses);
     let redirectCount = 0;
     const fetchImplementation = this.dependencies.fetchImplementation ?? globalThis.fetch;
@@ -254,16 +258,14 @@ export class DuckDuckGoSearchProvider implements SearchProvider {
       const timeout = setTimeout(() => controller.abort(), timeoutMs);
       try {
         const response = await fetchImplementation(currentUrl, {
-          method: "POST",
+          method: "GET",
           redirect: "manual",
           signal: controller.signal,
           headers: {
             Accept: "text/html, application/xhtml+xml",
-            "Content-Type": "application/x-www-form-urlencoded",
             Referer: "https://duckduckgo.com/",
-            "User-Agent": "MonsterScoutDuckDuckGoSearch/1.0",
+            "User-Agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
           },
-          body: new URLSearchParams({ q: request.query, kl: "wt-wt", kp: "1" }),
         });
 
         if (response.status >= 300 && response.status < 400) {
@@ -284,12 +286,23 @@ export class DuckDuckGoSearchProvider implements SearchProvider {
         }
 
         if (response.status !== 200) {
-          throw new DuckDuckGoSearchError("REQUEST_FAILED", `DuckDuckGo returned HTTP ${response.status}.`);
+          const error = new DuckDuckGoSearchError("REQUEST_FAILED", `DuckDuckGo returned HTTP ${response.status}.`);
+          if (this.dependencies.fallbackProvider !== null && (response.status === 202 || response.status === 403)) {
+            return (this.dependencies.fallbackProvider ?? bingHtmlSearchProvider).search(request);
+          }
+          throw error;
         }
 
         const html = await readBoundedBody(response, maxBytes);
         const results = parseSearchResults(html, request, (this.dependencies.now ?? (() => new Date()))().toISOString());
-        assertUsableSearchResponse(html, results);
+        try {
+          assertUsableSearchResponse(html, results);
+        } catch (error) {
+          if (this.dependencies.fallbackProvider !== null) {
+            return (this.dependencies.fallbackProvider ?? bingHtmlSearchProvider).search(request);
+          }
+          throw error;
+        }
         return results;
       } catch (error) {
         throw searchError(error, controller.signal);

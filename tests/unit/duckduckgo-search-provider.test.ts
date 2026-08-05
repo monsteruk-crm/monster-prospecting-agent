@@ -26,11 +26,10 @@ describe("DuckDuckGoSearchProvider", () => {
     const fetchImplementation = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
       const url = new URL(String(input));
       expect(url.pathname).toBe("/html/");
-      expect(init?.method).toBe("POST");
-      const body = new URLSearchParams(String(init?.body));
-      expect(body.get("q")).toBe(request.query);
-      expect(body.get("kl")).toBe("wt-wt");
-      expect(body.get("kp")).toBe("1");
+      expect(url.searchParams.get("q")).toBe(request.query);
+      expect(url.searchParams.get("s")).toBe("0");
+      expect(init?.method).toBe("GET");
+      expect(init?.body).toBeUndefined();
       return htmlResponse(`
         <div class="result results_links">
           <h2 class="result__title">
@@ -48,6 +47,7 @@ describe("DuckDuckGoSearchProvider", () => {
     const provider = new DuckDuckGoSearchProvider({
       fetchImplementation,
       resolveAddresses: publicAddresses,
+      fallbackProvider: null,
       now: () => new Date("2026-08-04T12:00:00.000Z"),
     });
 
@@ -84,6 +84,7 @@ describe("DuckDuckGoSearchProvider", () => {
     const provider = new DuckDuckGoSearchProvider({
       fetchImplementation,
       resolveAddresses: publicAddresses,
+      fallbackProvider: null,
     });
 
     const results = await provider.search({ ...request, resultLimit: 1 });
@@ -111,6 +112,7 @@ describe("DuckDuckGoSearchProvider", () => {
     const provider = new DuckDuckGoSearchProvider({
       fetchImplementation: vi.fn(async () => htmlResponse('<form id="challenge-form">Please complete the challenge</form>')),
       resolveAddresses: publicAddresses,
+      fallbackProvider: null,
     });
 
     await expect(provider.search(request)).rejects.toMatchObject({
@@ -123,6 +125,7 @@ describe("DuckDuckGoSearchProvider", () => {
     const provider = new DuckDuckGoSearchProvider({
       fetchImplementation: vi.fn(async () => new Response("", { status: 202, headers: { "content-type": "text/html" } })),
       resolveAddresses: publicAddresses,
+      fallbackProvider: null,
     });
 
     await expect(provider.search(request)).rejects.toMatchObject({ code: "REQUEST_FAILED" });
