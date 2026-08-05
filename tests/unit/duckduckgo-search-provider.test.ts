@@ -106,4 +106,25 @@ describe("DuckDuckGoSearchProvider", () => {
 
     await expect(provider.search(request)).rejects.toMatchObject({ code: "REDIRECT_NOT_ALLOWED" });
   });
+
+  test("reports a challenge page instead of silently returning zero results", async () => {
+    const provider = new DuckDuckGoSearchProvider({
+      fetchImplementation: vi.fn(async () => htmlResponse('<form id="challenge-form">Please complete the challenge</form>')),
+      resolveAddresses: publicAddresses,
+    });
+
+    await expect(provider.search(request)).rejects.toMatchObject({
+      code: "NO_USABLE_RESULTS",
+      message: expect.stringContaining("challenge"),
+    });
+  });
+
+  test("does not treat an asynchronous non-200 response as search results", async () => {
+    const provider = new DuckDuckGoSearchProvider({
+      fetchImplementation: vi.fn(async () => new Response("", { status: 202, headers: { "content-type": "text/html" } })),
+      resolveAddresses: publicAddresses,
+    });
+
+    await expect(provider.search(request)).rejects.toMatchObject({ code: "REQUEST_FAILED" });
+  });
 });

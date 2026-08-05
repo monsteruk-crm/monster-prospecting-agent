@@ -34,6 +34,7 @@ export const DUCKDUCKGO_ERROR_CODES = [
   "CONTENT_LENGTH_EXCEEDED",
   "BODY_TOO_LARGE",
   "TIMEOUT",
+  "NO_USABLE_RESULTS",
   "REQUEST_FAILED",
 ] as const;
 
@@ -146,6 +147,20 @@ function parseSearchResults(html: string, request: SearchProviderRequest, now: s
   }
 
   return results;
+}
+
+function assertUsableSearchResponse(html: string, results: SearchResult[]): void {
+  if (results.length > 0) return;
+  if (/(?:captcha|challenge-form|anomaly-modal|unusual traffic|verify you are human|automated queries)/i.test(html)) {
+    throw new DuckDuckGoSearchError(
+      "NO_USABLE_RESULTS",
+      "DuckDuckGo returned a challenge or bot-block page instead of search results.",
+    );
+  }
+  throw new DuckDuckGoSearchError(
+    "NO_USABLE_RESULTS",
+    "DuckDuckGo returned no parseable search results.",
+  );
 }
 
 async function readBoundedBody(response: Response, maxBytes: number): Promise<string> {
@@ -268,12 +283,14 @@ export class DuckDuckGoSearchProvider implements SearchProvider {
           continue;
         }
 
-        if (response.status < 200 || response.status >= 300) {
+        if (response.status !== 200) {
           throw new DuckDuckGoSearchError("REQUEST_FAILED", `DuckDuckGo returned HTTP ${response.status}.`);
         }
 
         const html = await readBoundedBody(response, maxBytes);
-        return parseSearchResults(html, request, (this.dependencies.now ?? (() => new Date()))().toISOString());
+        const results = parseSearchResults(html, request, (this.dependencies.now ?? (() => new Date()))().toISOString());
+        assertUsableSearchResponse(html, results);
+        return results;
       } catch (error) {
         throw searchError(error, controller.signal);
       } finally {
