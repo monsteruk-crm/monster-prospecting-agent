@@ -1258,7 +1258,7 @@ interface SearchProvider {
 }
 ```
 
-For the MVP, use DuckDuckGo's non-JavaScript HTML results surface through the provider adapter; it requires no paid Brave credential. Keep the abstraction vendor-neutral so Brave Search API or another provider can be added later without changing the graph.
+For the MVP, use the configured Brave Search API through the provider adapter. Keep DuckDuckGo's non-JavaScript HTML adapter as a no-key compatibility path and keep the abstraction vendor-neutral so provider behavior can change without changing the graph.
 
 The graph and tools must not depend on provider-specific shapes.
 
@@ -1990,7 +1990,7 @@ A CRM lead can be traced back to:
 ## Day 3 — The first real sales hunt
 
 1. Implement `SearchProvider`.
-2. Connect and verify the MVP DuckDuckGo search provider.
+2. Connect and verify the configured Brave Search API provider, retaining DuckDuckGo as a no-key compatibility adapter.
 3. Define `search_web`, `safe_fetch`, `check_local_duplicates` and `inspect_public_contact_route`.
 4. Create the bounded Lead Hunter Agent.
 5. Build the minimal LangGraph mission.

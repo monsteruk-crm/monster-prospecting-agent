@@ -16,7 +16,7 @@ The JSON body is the same `SalesMissionBrief` accepted by `POST /api/missions`:
 }
 ```
 
-The route applies the normal Zod defaults and mission limits. It creates a fresh mission/run ID, prepares the target profile and search strategy, then runs the LangGraph discovery segment with the default DuckDuckGo provider, SSRF-safe source fetcher, account extraction and buying-signal verification.
+The route applies the normal Zod defaults and mission limits. It creates a fresh mission/run ID, prepares the target profile and search strategy, then runs the LangGraph discovery segment with the default Brave Search API provider when `BRAVE_API` or `BRAVE_API_KEY` is configured, otherwise the DuckDuckGo/Bing compatibility provider, followed by SSRF-safe source fetching, account extraction and buying-signal verification.
 
 ## Success response
 
@@ -45,7 +45,7 @@ warnings[]
 errors[]
 ```
 
-`searchResults[]` contains bounded DuckDuckGo discovery metadata and snippets. `fetchedSources[]` contains final URL, status, MIME type, title, a short readable excerpt, byte count, content hash, retrieval time, redirect count and the originating query. Raw page bodies are never returned.
+`searchResults[]` contains bounded search-provider discovery metadata and snippets. The normal deployment provider is Brave Search API; provider-specific results are normalized before persistence. `fetchedSources[]` contains final URL, status, MIME type, title, a short readable excerpt, byte count, content hash, retrieval time, redirect count and the originating query. Raw page bodies are never returned.
 
 `accountExtractionCandidates[]` contains structured model proposals linked to one fetched source hash. `accounts[]` contains deterministic account records with a stable account key, source evidence IDs and a structured `classification` object with one primary category, zero or more secondary categories, a controlled buyer model and a normalized `subtypes` array. The extraction response uses a strict object schema in which every classification property is required; unsupported subtypes are represented by `[]`. Safe-fetch contact parsing repairs recognised email suffixes when visible copy is concatenated to an address and discards malformed candidates without failing the whole page. `buyingSignals[]` contains one or more verification outcomes with `verified`, `evidenceState`, `freshness`, confidence, a short supported excerpt when available, the source URL and content hash. Model output is advisory: unsupported excerpts, conflicts, missing verification and dates not present in the fetched excerpt remain unverified or unknown.
 
@@ -75,7 +75,7 @@ The discovery route uses the LangGraph Postgres checkpointer and interrupts afte
 - `GET /api/runs?limit=20` returns recent persisted run IDs, mission names, statuses, stages and review statuses.
 - `DELETE /api/runs` accepts `{ "ids": string[] }` for immediate bounded bulk deletion of selected runs; `DELETE /api/runs/:id` deletes one run. Run-owned accounts, evidence, signals, reviews and audit events cascade; the parent mission remains.
 - `GET /api/runs/:missionRunId` includes the saved `MISSION_PROGRESS` and `MISSION_SEARCH_PROGRESS` audit events. Search progress records the executed query, query status, result count, cumulative bounded search results and search usage.
-- `POST /api/runs/:missionRunId/search-more` accepts optional `additionalSearches`, `additionalPages`, `additionalModelCalls` and `additionalCostUsd`. It reuses the saved mission strategy and evidence, asks DuckDuckGo for a deeper result window, excludes previously saved URLs, and persists the new results to the same run. Defaults are 7 searches, 20 pages, 12 model calls and USD 2; all values remain bounded.
+- `POST /api/runs/:missionRunId/search-more` accepts optional `additionalSearches`, `additionalPages`, `additionalModelCalls` and `additionalCostUsd`. It reuses the saved mission strategy and evidence, asks the configured search provider for a deeper result window, excludes previously saved URLs, and persists the new results to the same run. Defaults are 7 searches, 20 pages, 12 model calls and USD 2; all values remain bounded.
 - `POST /api/runs/:missionRunId/rerun` validates the saved mission brief and starts a fresh bounded run under the same parent mission. It does not copy prior search results or evidence; the original run remains in history.
 - `POST /api/runs/:missionRunId/accounts/:accountId/contact-enrichment` accepts bounded `additionalSearches` (0..1), `additionalPages` (1..3) and `additionalModelCalls` (0..1). It targets one existing account, skips market discovery, prefers saved official links and performs at most one focused same-site search plus up to three official-page fetches.
 

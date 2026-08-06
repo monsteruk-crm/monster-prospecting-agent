@@ -62,7 +62,7 @@ The home screen's smoke-test control calls `POST /api/smoke`. It remains blocked
 
 Act 1 mission preparation is available at `POST /api/missions`. It accepts a validated sales brief, returns a bounded target profile and search strategy, and stops at `READY_FOR_DISCOVERY`; it performs no live research.
 
-The discovery graph is available through the `POST /api/missions/discover` Node.js route and the server-side `discoverSalesMission` function in `lib/graph/sales-mission-discovery.ts`. It defaults to `DuckDuckGoSearchProvider`, which uses DuckDuckGo's non-JavaScript HTML results surface and requires no Brave credential. It calls the provider within the mission search budget, invokes the SSRF-safe `safe_fetchTool` within the page budget, then runs bounded account extraction and buying-signal verification using the `EXTRACTION_MODEL` and `VERIFICATION_MODEL` registry roles. The MVP default target is up to five candidate accounts. A different provider or test extractor/verifier can be injected into the graph function.
+The discovery graph is available through the `POST /api/missions/discover` Node.js route and the server-side `discoverSalesMission` function in `lib/graph/sales-mission-discovery.ts`. It defaults to `BraveSearchProvider` when `BRAVE_API` or `BRAVE_API_KEY` is configured, and otherwise uses the DuckDuckGo/Bing compatibility adapter. It calls the provider within the mission search budget, invokes the SSRF-safe `safe_fetchTool` within the page budget, then runs bounded account extraction and buying-signal verification using the `EXTRACTION_MODEL` and `VERIFICATION_MODEL` registry roles. The MVP default target is up to five candidate accounts. A different provider or test extractor/verifier can be injected into the graph function.
 
 Run it locally after starting Next.js:
 
@@ -72,7 +72,7 @@ curl --request POST http://localhost:3000/api/missions/discover \
   --data '{"name":"DACH promoter hunt","geographies":["Germany"],"accountCategories":["TICKETED_EVENT_PROMOTER"],"buyerRoles":["Managing Director"]}'
 ```
 
-The route starts a fresh bounded run, persists the prepared mission brief and search strategy, performs live DuckDuckGo and source fetch requests, filters known review sites, job boards, directories, ticket resellers and non-first-party paths before `safe_fetch`, extracts accounts from short source excerpts, verifies buying-signal candidates, persists scored entities and a `PENDING` review snapshot, then returns `201` with partial results/errors. The response includes source-linked `accounts[]`, `buyingSignals[]` and `review`; a signal with no supported excerpt or no verification remains explicitly unverified with `MISSING_INFORMATION` and/or `UNKNOWN` freshness. The graph is checkpointed after verification. HTTP 403 source failures remain visible as partial errors rather than being bypassed.
+The route starts a fresh bounded run, persists the prepared mission brief and search strategy, performs live Brave and source fetch requests, filters known review sites, job boards, directories, ticket resellers and non-first-party paths before `safe_fetch`, extracts accounts from short source excerpts, verifies buying-signal candidates, persists scored entities and a `PENDING` review snapshot, then returns `201` with partial results/errors. The response includes source-linked `accounts[]`, `buyingSignals[]` and `review`; a signal with no supported excerpt or no verification remains explicitly unverified with `MISSING_INFORMATION` and/or `UNKNOWN` freshness. The graph is checkpointed after verification. HTTP 403 source failures remain visible as partial errors rather than being bypassed.
 
 ## Vercel runtime diagnostics
 
@@ -84,7 +84,7 @@ Use the production deployment and the request ID returned in a streamed error me
 vercel logs --environment production --level error --since 1h --json --expand
 ```
 
-The PostgreSQL `sslmode` warning is not itself a mission failure. The database client normalises legacy `prefer`, `require` and `verify-ca` modes to explicit `verify-full`; the deployment should still keep its provider’s current connection string in the configured environment variable. DuckDuckGo searches use the HTML endpoint’s browser-like `GET` surface with query parameters and a bounded request. A 403, 202 challenge response, or non-parseable result page is detected explicitly. The default adapter then uses a bounded, no-key Bing HTML fallback for that provider-block condition; Bing redirect URLs are unwrapped before candidate filtering. If both providers fail, the live stream reports the exact provider message and the server emits error-level structured events (`mission.discovery.search_provider_failed`) plus the request/run ID. A run may complete with zero accounts only when the provider failures are visible in the persisted dossier.
+The PostgreSQL `sslmode` warning is not itself a mission failure. The database client normalises legacy `prefer`, `require` and `verify-ca` modes to explicit `verify-full`; the deployment should still keep its provider’s current connection string in the configured environment variable. Brave searches use the HTTPS Web Search API and the `X-Subscription-Token` header; the token must remain server-side in `BRAVE_API` or `BRAVE_API_KEY`. Without a Brave key, the compatibility adapter uses DuckDuckGo's browser-like HTML `GET` surface with a bounded request and falls back to no-key Bing when DuckDuckGo returns a 403/202 challenge or non-parseable result page. If Brave fails, the live stream reports the exact provider message and the server emits error-level structured events (`mission.discovery.search_provider_failed`) plus the request/run ID. A run may complete with zero accounts only when the provider failures are visible in the persisted dossier.
 
 The `/missions/new` Scout builder exposes the essential brief before launch and the `/runs/:id` dossier shows the persisted brief after launch. Geography, buyer roles, required/preferred signals and exclusions are entered as comma-separated values. Set `Contact requirement` to `Only publicly confirmed email` when every returned account must have an email; the same rule is also recognised from instructions such as `return only contacts with an email`.
 
@@ -116,13 +116,13 @@ curl --request POST http://localhost:3000/api/crm/dry-run \
   --data '{"missionRunId":"...","idempotencyKey":"local-check","existingCompanyNames":[],"optedOutAccountIds":[]}'
 ```
 
-The controlled DuckDuckGo smoke check is:
+The controlled Brave smoke check is:
 
 ```bash
-npx tsx -e 'import { duckDuckGoSearchProvider } from "./lib/discovery/duckduckgo-search-provider.ts"; (async () => { const results = await duckDuckGoSearchProvider.search({ query: "site:duckduckgo.com DuckDuckGo", countryOrLocale: "global", freshnessWindowDays: 365, resultLimit: 2, missionRunId: "live-ddg-smoke" }); console.log(JSON.stringify(results, null, 2)); })();'
+set -a; source .env.local; set +a; npx tsx -e 'import { BraveSearchProvider } from "./lib/discovery/brave-search-provider.ts"; (async () => { const provider = new BraveSearchProvider({ apiKey: process.env.BRAVE_API ?? process.env.BRAVE_API_KEY }); const results = await provider.search({ query: "family attraction operator United Kingdom", countryOrLocale: "United Kingdom", freshnessWindowDays: 365, resultLimit: 2, missionRunId: "live-brave-smoke" }); console.log(JSON.stringify(results, null, 2)); })();'
 ```
 
-It makes one bounded request to DuckDuckGo's HTML surface and should return at least one typed result. Do not use it as an automated high-volume crawler.
+It makes one bounded request to Brave's Web Search API and should return at least one typed result. Do not use it as an automated high-volume crawler.
 
 For Prisma Postgres direct TCP credentials, use the provider URL with db.prisma.io:5432 and the root database path (/?sslmode=require). The project normalises a common /postgres path to / for this host. Prisma migrations require the direct TCP URL, not a pooled or Accelerate URL.
 

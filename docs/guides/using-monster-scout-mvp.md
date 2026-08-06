@@ -35,7 +35,7 @@ The MVP currently includes:
 - a focused New mission builder;
 - a Runs history and run dossier screen;
 - bounded discovery for up to five candidate accounts;
-- DuckDuckGo search through a provider adapter;
+- Brave Search API through a provider adapter, with DuckDuckGo/Bing compatibility fallback when no Brave key is configured;
 - SSRF-safe public page fetching;
 - structured account extraction;
 - evidence-backed buying-signal verification;
@@ -253,7 +253,7 @@ POST /api/missions/discover/stream
 The UI displays saved stage and query output while the server completes the run:
 
 1. mission brief persisted and run ID created;
-2. each DuckDuckGo query completed or failed, including new result counts;
+2. each Brave query completed or failed, including new result counts;
 3. official-source fetching progress;
 4. account extraction and buying-signal verification progress;
 5. ready for review.
@@ -270,7 +270,7 @@ The **Runs** page keeps mission history backed by PostgreSQL. Each row shows the
 
 Use **Search deeper** on a completed dossier when the first pass did not reach enough useful official sources. This performs another bounded pass using the same mission strategy, requests a deeper search-result window, skips URLs already saved for that run, and persists the new results under the same `missionRunId`. It does not create an unbounded crawler or a separate unowned search.
 
-When an account has only a role-only route, an unsuitable mailbox, or no verified public email for an email-required mission, use **Find better contacts**. This targets the selected account only, checks retained official-page navigation metadata, may run one focused same-site DuckDuckGo search, and fetches at most three additional official pages within the remaining mission budget. It never guesses an address, fetches LinkedIn, submits forms or sends outreach.
+When an account has only a role-only route, an unsuitable mailbox, or no verified public email for an email-required mission, use **Find better contacts**. This targets the selected account only, checks retained official-page navigation metadata, may run one focused same-site search through the configured provider, and fetches at most three additional official pages within the remaining mission budget. It never guesses an address, fetches LinkedIn, submits forms or sends outreach.
 
 ## Why a mission may return fewer than five accounts
 
@@ -290,6 +290,8 @@ A mission can return fewer accounts because:
 A smaller evidence-backed result is preferable to five fabricated or weak records.
 
 For `PUBLIC_EMAIL` missions, accounts without a verified usable public email remain in persisted audit/scoring data but are excluded from the dossier result list and approved export.
+
+The Settings page controls defaults for new missions. The New mission builder loads the saved candidate-account budget; changing **Target accounts** explicitly creates a mission-specific override. Existing runs retain the settings snapshot they were created with.
 
 ---
 

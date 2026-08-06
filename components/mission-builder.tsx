@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, type FormEvent } from "react";
+import { useEffect, useState, type FormEvent } from "react";
 import { useRouter } from "next/navigation";
 
 import { ProspectAccountCategoryPicker } from "@/components/prospect-account-category-picker";
@@ -22,6 +22,7 @@ export function MissionBuilder() {
   const [selectedCategories, setSelectedCategories] = useState<ProspectAccountCategory[]>([]);
   const [product, setProduct] = useState("THE_MONSTER");
   const [target, setTarget] = useState("5");
+  const [targetTouched, setTargetTouched] = useState(false);
   const [signals, setSignals] = useState("new programme, expansion, partnership");
   const [freshness, setFreshness] = useState("365");
   const [contact, setContact] = useState("ANY_ROUTE");
@@ -30,6 +31,18 @@ export function MissionBuilder() {
   const [advanced, setAdvanced] = useState(false);
   const [error, setError] = useState("");
   const [launching, setLaunching] = useState(false);
+
+  useEffect(() => {
+    let active = true;
+    void fetch("/api/settings/effective", { cache: "no-store" })
+      .then(async (response) => response.ok ? await response.json() as { settings?: { missionBudgets?: { maxCandidateAccounts?: number } } } : null)
+      .then((payload) => {
+        const configuredTarget = payload?.settings?.missionBudgets?.maxCandidateAccounts;
+        if (active && !targetTouched && Number.isInteger(configuredTarget)) setTarget(String(configuredTarget));
+      })
+      .catch(() => undefined);
+    return () => { active = false; };
+  }, [targetTouched]);
 
   async function submit(event: FormEvent) {
     event.preventDefault();
@@ -117,7 +130,7 @@ export function MissionBuilder() {
             </label>
             <label className="field">
               Target accounts
-              <input type="number" min="1" max="25" value={target} onChange={(event) => setTarget(event.target.value)} />
+              <input type="number" min="1" max="25" value={target} onChange={(event) => { setTargetTouched(true); setTarget(event.target.value); }} />
             </label>
           </div>
         </section>

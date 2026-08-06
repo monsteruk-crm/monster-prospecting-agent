@@ -21,6 +21,7 @@ import {
   type SearchProvider,
 } from "@/lib/discovery/search-provider";
 import { duckDuckGoSearchProvider } from "@/lib/discovery/duckduckgo-search-provider";
+import { braveSearchProvider } from "@/lib/discovery/brave-search-provider";
 import {
   BudgetSchema,
   AccountExtractionCandidateSchema,
@@ -362,7 +363,7 @@ function toDiscoveredAccount(candidate: AccountExtractionCandidate) {
 function createSearchProviderNode(
   dependencies: SalesMissionDiscoveryDependencies,
 ): GraphNode<SalesMissionDiscoveryGraphStateType> {
-  const searchProvider = dependencies.searchProvider ?? duckDuckGoSearchProvider;
+    const searchProvider = dependencies.searchProvider ?? (process.env.BRAVE_API || process.env.BRAVE_API_KEY ? braveSearchProvider : duckDuckGoSearchProvider);
 
   return async (state) => {
     if (dependencies.skipMarketSearch) {
@@ -978,7 +979,7 @@ function contactFallbackUrls(account: DiscoveredAccount): string[] {
 function createContactEnrichmentNode(
   dependencies: SalesMissionDiscoveryDependencies,
 ): GraphNode<SalesMissionDiscoveryGraphStateType> {
-  const searchProvider = dependencies.searchProvider ?? duckDuckGoSearchProvider;
+  const searchProvider = dependencies.searchProvider ?? (process.env.BRAVE_API || process.env.BRAVE_API_KEY ? braveSearchProvider : duckDuckGoSearchProvider);
   const fetchSource = dependencies.fetchSource ?? (async (input) => {
     const result = await safeFetchTool.invoke(input);
     return SafeFetchResultSchema.parse(result);

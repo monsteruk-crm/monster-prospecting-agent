@@ -295,7 +295,7 @@ export function MissionControl({ mode = "legacy", initialRunId = "" }: { mode?: 
         setDossierError("");
         setDossier(null);
         try {
-            setLaunchStatus("Searching DuckDuckGo, filtering candidates, and fetching first-party sources…");
+            setLaunchStatus("Searching Brave, filtering candidates, and fetching first-party sources…");
             setLiveOutput([]);
             const response = await fetch("/api/missions/discover/stream", {
                 method: "POST",

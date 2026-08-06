@@ -227,13 +227,13 @@ interface SearchProvider {
 }
 ```
 
-The current default adapter uses DuckDuckGo's non-JavaScript HTML search surface.
+The current default adapter uses Brave Search API when its configured subscription token is available; the DuckDuckGo/Bing HTML adapter remains available without a Brave key.
 
 The graph depends on the project search shape, not on provider-specific response objects.
 
 Benefits:
 
-- a paid provider such as Brave can be added later;
+- Brave Search API is the configured primary provider; DuckDuckGo/Bing remains the no-key compatibility path;
 - tests can inject fixtures;
 - the workflow does not need to change with the provider;
 - search budgets remain centralised.
@@ -747,7 +747,7 @@ The route returns `401` for missing/invalid authentication and `403` for an inva
 |---|---|---|
 | Mission launch | Implemented | richer editable target profile |
 | Discovery progress | Client-side named status | real graph event streaming |
-| Search | DuckDuckGo adapter | optional Brave/other providers |
+| Search | Brave Search API adapter | DuckDuckGo/Bing no-key compatibility adapter |
 | Source fetching | SSRF-safe bounded fetch | broader reachable-source strategies without bypass |
 | Account target | up to five | measured expansion after evaluation |
 | Checkpointing | Postgres checkpointed | operational hardening |
