@@ -683,7 +683,7 @@ type DiscoveredAccount = {
   website?: string;
   country?: string;
   city?: string;
-  categories: ProspectCategory[];
+  classification: ProspectAccountClassification;
   relevanceHypothesis: string;
   discoveredSignals: SignalHypothesis[];
   possibleBuyerRoles: string[];
@@ -705,7 +705,7 @@ The graph first produces a structured target profile.
 ```ts
 type TargetProfile = {
   geographies: string[];
-  accountCategories: ProspectCategory[];
+  accountCategories: ProspectAccountCategory[];
   excludedCategories: string[];
   productFocus: "THE_MONSTER" | "MEGA_BOUNCE_HOUSE" | "UNDECIDED";
   requiredSignals: string[];
@@ -1368,7 +1368,7 @@ Add Vercel Queues only when:
 - website;
 - country;
 - city;
-- categories;
+- classification;
 - business summary;
 - scale signals;
 - account fingerprint;

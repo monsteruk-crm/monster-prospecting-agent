@@ -10,7 +10,7 @@ The JSON body is the same `SalesMissionBrief` accepted by `POST /api/missions`:
 {
   "name": "DACH promoter hunt",
   "geographies": ["Germany", "Austria"],
-  "accountCategories": ["TICKETED_EVENT_PROMOTER"],
+  "accountCategories": ["TICKETED_EVENT_PROMOTER", "FESTIVAL_PRODUCER"],
   "contactRequirement": "PUBLIC_EMAIL",
   "buyerRoles": ["Managing Director", "Head of Programming"]
 }
@@ -47,7 +47,7 @@ errors[]
 
 `searchResults[]` contains bounded DuckDuckGo discovery metadata and snippets. `fetchedSources[]` contains final URL, status, MIME type, title, a short readable excerpt, byte count, content hash, retrieval time, redirect count and the originating query. Raw page bodies are never returned.
 
-`accountExtractionCandidates[]` contains structured model proposals linked to one fetched source hash. `accounts[]` contains deterministic account records with a stable account key and source evidence IDs. `buyingSignals[]` contains one or more verification outcomes with `verified`, `evidenceState`, `freshness`, confidence, a short supported excerpt when available, the source URL and content hash. Model output is advisory: unsupported excerpts, conflicts, missing verification and dates not present in the fetched excerpt remain unverified or unknown.
+`accountExtractionCandidates[]` contains structured model proposals linked to one fetched source hash. `accounts[]` contains deterministic account records with a stable account key, source evidence IDs and a structured `classification` object with one primary category, zero or more secondary categories, a controlled buyer model and optional subtypes. `buyingSignals[]` contains one or more verification outcomes with `verified`, `evidenceState`, `freshness`, confidence, a short supported excerpt when available, the source URL and content hash. Model output is advisory: unsupported excerpts, conflicts, missing verification and dates not present in the fetched excerpt remain unverified or unknown.
 
 The graph stages are `SEARCH_PROVIDER`, `OFFICIAL_SOURCE_FETCH`, `ACCOUNT_EXTRACTION`, `BUYING_SIGNAL_VERIFICATION`, bounded contact enrichment (`CONTACT_PLAN`, `CONTACT_SOURCE_DISCOVERY`, `CONTACT_SOURCE_FETCH`, `CONTACT_EXTRACTION`, `CONTACT_VERIFICATION`), `SCORE_RECALCULATION` and `READY_FOR_REVIEW`. Account extraction, verification and contact enrichment consume the shared mission budgets. Partial provider, source or contact failures remain visible in `errors[]`/`warnings[]`, the streamed failed-query detail and structured server logs; they do not discard successful accounts or signals.
 
