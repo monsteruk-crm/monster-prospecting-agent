@@ -5,6 +5,7 @@ import { Prisma, type PrismaClient } from "@/prisma/generated/client";
 import { ContactRouteSchema, FirstMoveBriefSchema } from "@/lib/sales/contact-schema";
 import { ProspectScoreSchema } from "@/lib/sales/score-engine";
 import { requiresPublicEmail } from "@/lib/sales/contact-route-engine";
+import { coerceProspectAccountClassification, getProspectCategoryDefinition } from "@/lib/sales/prospect-taxonomy";
 
 export const LeadExportColumnSchema = z.enum([
   "company_name", "website", "country", "city", "contact_name", "role", "email", "source_url", "category", "size/signals", "notes", "confidence", "status", "owner", "last_touch", "opt_out",
@@ -74,7 +75,9 @@ export async function buildApprovedLeadExport(
     const signalText = account.buyingSignals.filter((signal) => signal.verified).map((signal) => `${signal.signalType}: ${signal.summary}`).join("; ");
     const draft = FirstMoveBriefSchema.safeParse(account.firstMoveDraft).success ? FirstMoveBriefSchema.parse(account.firstMoveDraft) : null;
     const unresolvedQuestions = jsonArrayStrings(account.unresolvedQuestions);
-    const categories = jsonArrayStrings(account.categories);
+    const classification = coerceProspectAccountClassification(account.categories);
+    const primaryLabel = getProspectCategoryDefinition(classification.primaryCategory).label;
+    const secondaryLabels = classification.secondaryCategories.map((category) => getProspectCategoryDefinition(category).label);
     const notes = [draft?.opening, draft?.ask, unresolvedQuestions.length > 0 ? `Open questions: ${unresolvedQuestions.join("; ")}` : ""].filter(Boolean).join(" ");
     const sourceUrl = account.evidence[0]?.finalUrl ?? account.website ?? "";
     return LeadExportRowSchema.parse({
@@ -86,7 +89,7 @@ export async function buildApprovedLeadExport(
       role: route?.targetRole ?? "",
       email: route?.email ?? "",
       source_url: sourceUrl,
-      category: categories.join("; "),
+      category: [primaryLabel, secondaryLabels.length > 0 ? `Secondary: ${secondaryLabels.join(", ")}` : "", `Buyer model: ${classification.buyerModel}`].filter(Boolean).join(" | "),
       "size/signals": signalText,
       notes,
       confidence: score?.scoreState === "HOT" ? "HIGH" : score?.scoreState === "WARM" ? "MEDIUM" : score ? "LOW" : "UNKNOWN",

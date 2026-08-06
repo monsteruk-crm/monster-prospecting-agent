@@ -4,6 +4,7 @@ import { getPrismaClient } from "@/lib/db/client";
 import { Prisma, type PrismaClient } from "@/prisma/generated/client";
 import { ReviewStatusSchema } from "@/lib/sales/review-schema";
 import { FirstMoveBriefSchema, type FirstMoveBrief } from "@/lib/sales/contact-schema";
+import { coerceProspectAccountClassification } from "@/lib/sales/prospect-taxonomy";
 
 export const ReviewDecisionActionSchema = z.enum([
   "APPROVE",
@@ -122,7 +123,7 @@ export async function getMissionRunDossier(
   missionRunId: string,
   client: PersistenceClient = getPrismaClient(),
 ) {
-  return client.salesMissionRun.findUnique({
+  const dossier = await client.salesMissionRun.findUnique({
     where: { id: missionRunId },
     include: {
       mission: true,
@@ -136,6 +137,14 @@ export async function getMissionRunDossier(
       },
     },
   });
+  if (!dossier) return null;
+  return {
+    ...dossier,
+    accounts: dossier.accounts.map((account) => ({
+      ...account,
+      classification: coerceProspectAccountClassification(account.categories),
+    })),
+  };
 }
 
 export async function persistFirstMoveDraft(

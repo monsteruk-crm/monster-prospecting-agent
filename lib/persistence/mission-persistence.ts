@@ -14,7 +14,6 @@ import {
   SearchStrategySchema,
   TargetProfileSchema,
   VerifiedBuyingSignalSchema,
-  type ProspectAccountClassification,
   type Budget,
   type DiscoveredAccount,
   type FetchedSourceReference,
@@ -24,7 +23,6 @@ import {
   type TargetProfile,
   type VerifiedBuyingSignal,
 } from "@/lib/sales/mission-schema";
-import { coerceProspectAccountClassification } from "@/lib/sales/prospect-taxonomy";
 import { scoreProspectAccount } from "@/lib/sales/score-engine";
 import { deriveContactRoutes } from "@/lib/sales/contact-route-engine";
 import { getDomain } from "tldts";

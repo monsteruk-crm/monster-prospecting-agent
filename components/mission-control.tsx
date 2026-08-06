@@ -27,7 +27,7 @@ type MissionBrief = {
     name: string;
     owner: string;
     geographies: string[];
-    accountCategories: string[];
+    accountCategories: ProspectAccountCategory[];
     productFocus: string;
     contactRequirement: string;
     requiredSignals: string[];
@@ -283,6 +283,10 @@ export function MissionControl({ mode = "legacy", initialRunId = "" }: { mode?: 
 
     async function launchMission(event: FormEvent<HTMLFormElement>) {
         event.preventDefault();
+        if (accountCategories.length === 0) {
+            setDossierError("Select at least one target account category.");
+            return;
+        }
         setIsLaunching(true);
         setLaunchStatus("Preparing mission…");
         setDossierError("");
@@ -589,7 +593,7 @@ export function MissionControl({ mode = "legacy", initialRunId = "" }: { mode?: 
                                                                                              onChange={(event) => setGeography(event.target.value)}
                                                                                              placeholder="United Kingdom, Ireland"
                                 className="mt-1 w-full rounded-xl border border-white/15 bg-black/20 px-3 py-2 text-sm text-white"
-                                                                                             required/></label><div className="sm:col-span-2 lg:col-span-3"><ProspectAccountCategoryPicker value={accountCategories} onChange={setAccountCategories} error={accountCategories.length === 0 && launchStatus ? "Select at least one target account category." : undefined} /></div><label className="text-xs text-white/50">Product focus<select
+                                                                                             required/></label><div className="sm:col-span-2 lg:col-span-3"><ProspectAccountCategoryPicker value={accountCategories} onChange={setAccountCategories} error={accountCategories.length === 0 ? "Select at least one target account category." : undefined} /></div><label className="text-xs text-white/50">Product focus<select
                                 value={productFocus} onChange={(event) => setProductFocus(event.target.value)}
                                 className="mt-1 w-full rounded-xl border border-white/15 bg-black/20 px-3 py-2 text-sm text-white">
                                 <option value="THE_MONSTER">The Monster</option>
@@ -790,7 +794,7 @@ function DossierView({
                 <div><p className="text-xs uppercase tracking-[0.14em] text-white/35">Geographies</p><p
                     className="mt-1 text-white/80">{dossier.mission.brief.geographies.join(", ")}</p></div>
                 <div><p className="text-xs uppercase tracking-[0.14em] text-white/35">Account categories</p><p
-                    className="mt-1 text-white/80">{dossier.mission.brief.accountCategories.map((category) => getProspectCategoryDefinition(category as ProspectAccountCategory).label).join(", ")}</p></div>
+                    className="mt-1 text-white/80">{dossier.mission.brief.accountCategories.map((category) => getProspectCategoryDefinition(category).label).join(", ")}</p></div>
                 <div><p className="text-xs uppercase tracking-[0.14em] text-white/35">Product focus</p><p
                     className="mt-1 text-white/80">{dossier.mission.brief.productFocus}</p></div>
                 <div><p className="text-xs uppercase tracking-[0.14em] text-white/35">Contact requirement</p><p

@@ -9,7 +9,6 @@ import { ABSOLUTE_SCOUT_LIMITS } from "@/lib/settings/absolute-limits";
 import {
   ProspectAccountCategorySchema,
   ProspectAccountClassificationSchema,
-  ProspectBuyerModelSchema,
   ProspectCategorySelectionSchema,
   type ProspectAccountCategory,
   type ProspectAccountClassification,
