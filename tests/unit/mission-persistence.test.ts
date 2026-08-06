@@ -91,7 +91,7 @@ describe("mission persistence", () => {
       companyName: "Acme Events",
       officialDomain: "https://acme.org",
       website: "https://acme.org/programme",
-      classification: { primaryCategory: "FAMILY_ATTRACTION_OPERATOR" as const, secondaryCategories: ["LEISURE_ENTERTAINMENT_GROUP" as const], buyerModel: "OWNER_OPERATOR" as const },
+      classification: { primaryCategory: "FAMILY_ATTRACTION_OPERATOR" as const, secondaryCategories: ["LEISURE_ENTERTAINMENT_GROUP"] as ["LEISURE_ENTERTAINMENT_GROUP"], buyerModel: "OWNER_OPERATOR" as const },
       relevanceHypothesis: "The organisation operates a public attraction.",
       discoveredSignals: [],
       possibleBuyerRoles: ["Managing Director"],

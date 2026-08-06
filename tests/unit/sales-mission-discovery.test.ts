@@ -34,9 +34,9 @@ function extractionResult(): AccountExtractionProposal {
     country: "Germany",
     city: "Berlin",
     classification: {
-      primaryCategory: "TICKETED_EVENT_PROMOTER",
+      primaryCategory: "TICKETED_EVENT_PROMOTER" as const,
       secondaryCategories: ["PUBLIC_EVENT_CONTRACTOR"],
-      buyerModel: "PROMOTER",
+      buyerModel: "PROMOTER" as const,
     },
     relevanceHypothesis: "The organisation appears to operate public ticketed programmes.",
     possibleBuyerRoles: ["Managing Director"],

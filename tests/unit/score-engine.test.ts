@@ -11,7 +11,7 @@ const brief = {
 
 const account = {
   accountKey: "example.org:example", companyName: "Example Attraction", officialDomain: "https://example.org", website: "https://example.org/visit",
-  country: "UK", city: "London", classification: { primaryCategory: "FAMILY_ATTRACTION_OPERATOR", secondaryCategories: ["LEISURE_ENTERTAINMENT_GROUP"], buyerModel: "OWNER_OPERATOR" as const }, relevanceHypothesis: "A large ticketed attraction with public programming and audience operations.",
+  country: "UK", city: "London", classification: { primaryCategory: "FAMILY_ATTRACTION_OPERATOR" as const, secondaryCategories: ["LEISURE_ENTERTAINMENT_GROUP"] as ["LEISURE_ENTERTAINMENT_GROUP"], buyerModel: "OWNER_OPERATOR" as const }, relevanceHypothesis: "A large ticketed attraction with public programming and audience operations.",
   discoveredSignals: [], possibleBuyerRoles: ["Head of Programming"], discoveryEvidenceIds: ["source:hash"], unresolvedQuestions: [],
 };
 

@@ -3,8 +3,8 @@ import { z } from "zod";
 import {
   ContactRequirementSchema,
   ProductFocusSchema,
-  ProspectCategorySelectionSchema,
 } from "@/lib/sales/mission-schema";
+import { ProspectCategorySelectionSchema } from "@/lib/sales/prospect-taxonomy";
 import { ABSOLUTE_SCOUT_LIMITS, ABSOLUTE_LIMITS_VERSION } from "@/lib/settings/absolute-limits";
 
 const boundedText = z.string().trim().min(1).max(200);
