@@ -181,6 +181,7 @@ export function MissionControl({ mode = "legacy", initialRunId = "" }: { mode?: 
     const [instructions, setInstructions] = useState("");
     const [launchStatus, setLaunchStatus] = useState("");
     const [isLaunching, setIsLaunching] = useState(false);
+    const [hasAttemptedLaunch, setHasAttemptedLaunch] = useState(false);
     const [isContinuing, setIsContinuing] = useState(false);
     const [isContactEnriching, setIsContactEnriching] = useState(false);
     const [researchGap, setResearchGap] = useState("");
@@ -283,6 +284,7 @@ export function MissionControl({ mode = "legacy", initialRunId = "" }: { mode?: 
 
     async function launchMission(event: FormEvent<HTMLFormElement>) {
         event.preventDefault();
+        setHasAttemptedLaunch(true);
         if (accountCategories.length === 0) {
             setDossierError("Select at least one target account category.");
             return;
@@ -593,7 +595,7 @@ export function MissionControl({ mode = "legacy", initialRunId = "" }: { mode?: 
                                                                                              onChange={(event) => setGeography(event.target.value)}
                                                                                              placeholder="United Kingdom, Ireland"
                                 className="mt-1 w-full rounded-xl border border-white/15 bg-black/20 px-3 py-2 text-sm text-white"
-                                                                                             required/></label><div className="sm:col-span-2 lg:col-span-3"><ProspectAccountCategoryPicker value={accountCategories} onChange={setAccountCategories} error={accountCategories.length === 0 ? "Select at least one target account category." : undefined} /></div><label className="text-xs text-white/50">Product focus<select
+                                                                                             required/></label><div className="sm:col-span-2 lg:col-span-3"><ProspectAccountCategoryPicker value={accountCategories} onChange={setAccountCategories} error={hasAttemptedLaunch && accountCategories.length === 0 ? "Select at least one target account category." : undefined} /></div><label className="text-xs text-white/50">Product focus<select
                                 value={productFocus} onChange={(event) => setProductFocus(event.target.value)}
                                 className="mt-1 w-full rounded-xl border border-white/15 bg-black/20 px-3 py-2 text-sm text-white">
                                 <option value="THE_MONSTER">The Monster</option>

@@ -4,14 +4,14 @@ import { scoreProspectAccount } from "@/lib/sales/score-engine";
 import { ContactRouteSchema } from "@/lib/sales/contact-schema";
 
 const brief = {
-  name: "Score test", owner: "Nick", geographies: ["UK"], accountCategories: ["VISITOR_ATTRACTION" as const], productFocus: "THE_MONSTER" as const, contactRequirement: "ANY_ROUTE" as const,
+  name: "Score test", owner: "Nick", geographies: ["UK"], accountCategories: ["FAMILY_ATTRACTION_OPERATOR" as const, "LEISURE_ENTERTAINMENT_GROUP" as const], productFocus: "THE_MONSTER" as const, contactRequirement: "ANY_ROUTE" as const,
   requiredSignals: [], preferredSignals: [], buyerRoles: ["Head of Programming"], freshnessWindowDays: 365, exclusions: [], instructions: "",
   limits: { maxSearches: 1, maxPages: 1, maxModelCalls: 2, maxCostUsd: 2, maxCandidateAccounts: 1 },
 };
 
 const account = {
   accountKey: "example.org:example", companyName: "Example Attraction", officialDomain: "https://example.org", website: "https://example.org/visit",
-  country: "UK", city: "London", categories: ["VISITOR_ATTRACTION" as const], relevanceHypothesis: "A large ticketed attraction with public programming and audience operations.",
+  country: "UK", city: "London", classification: { primaryCategory: "FAMILY_ATTRACTION_OPERATOR", secondaryCategories: ["LEISURE_ENTERTAINMENT_GROUP"], buyerModel: "OWNER_OPERATOR" as const }, relevanceHypothesis: "A large ticketed attraction with public programming and audience operations.",
   discoveredSignals: [], possibleBuyerRoles: ["Head of Programming"], discoveryEvidenceIds: ["source:hash"], unresolvedQuestions: [],
 };
 

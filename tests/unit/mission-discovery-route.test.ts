@@ -16,7 +16,7 @@ import { POST } from "@/app/api/missions/discover/route";
 const brief = {
   name: "Route discovery test",
   geographies: ["Germany"],
-  accountCategories: ["TICKETED_EVENT_PROMOTER"],
+  accountCategories: ["TICKETED_EVENT_PROMOTER", "FESTIVAL_PRODUCER"],
   buyerRoles: ["Managing Director"],
 };
 
@@ -26,7 +26,7 @@ const prepared = {
   brief: { ...brief, owner: "unassigned", productFocus: "THE_MONSTER", requiredSignals: [], preferredSignals: [], freshnessWindowDays: 365, exclusions: [], instructions: "", limits: { maxSearches: 1, maxPages: 1, maxModelCalls: 12, maxCostUsd: 2, maxCandidateAccounts: 3 } },
   targetProfile: {
     geographies: ["Germany"],
-    accountCategories: ["TICKETED_EVENT_PROMOTER"],
+    accountCategories: ["TICKETED_EVENT_PROMOTER", "FESTIVAL_PRODUCER"],
     excludedCategories: [],
     productFocus: "THE_MONSTER",
     requiredSignals: [],

@@ -7,7 +7,7 @@ describe("sales mission brief schema", () => {
     const brief = SalesMissionBriefSchema.parse({
       name: "Benelux family attraction hunt",
       geographies: ["Belgium", "Netherlands"],
-      accountCategories: ["FAMILY_ATTRACTION_OPERATOR"],
+      accountCategories: ["FAMILY_ATTRACTION_OPERATOR", "LEISURE_ENTERTAINMENT_GROUP"],
       buyerRoles: ["Commercial Director"],
     });
 
@@ -21,7 +21,7 @@ describe("sales mission brief schema", () => {
     const brief = SalesMissionBriefSchema.parse({
       name: "Five-account hunt",
       geographies: ["Germany"],
-      accountCategories: ["FESTIVAL_PRODUCER"],
+      accountCategories: ["FESTIVAL_PRODUCER", "PUBLIC_EVENT_CONTRACTOR"],
       buyerRoles: ["Event Director"],
       limits: { maxCandidateAccounts: 25 },
     });
@@ -29,7 +29,7 @@ describe("sales mission brief schema", () => {
     expect(() => SalesMissionBriefSchema.parse({
       name: "Over-sized hunt",
       geographies: ["Germany"],
-      accountCategories: ["FESTIVAL_PRODUCER"],
+      accountCategories: ["FESTIVAL_PRODUCER", "PUBLIC_EVENT_CONTRACTOR"],
       buyerRoles: ["Event Director"],
       limits: { maxCandidateAccounts: 26 },
     })).toThrow();

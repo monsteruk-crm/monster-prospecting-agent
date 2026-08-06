@@ -33,7 +33,7 @@ describe("sales mission preparation graph", () => {
     const state = await prepareSalesMission({
       name: "Instruction review hunt",
       geographies: ["Belgium"],
-      accountCategories: ["VISITOR_ATTRACTION"],
+      accountCategories: ["FAMILY_ATTRACTION_OPERATOR", "LEISURE_ENTERTAINMENT_GROUP"],
       buyerRoles: ["Partnerships Director"],
       instructions: "Prefer organisations with a public winter programme.",
     });

@@ -13,7 +13,7 @@ import { POST } from "@/app/api/missions/route";
 const brief = {
   name: "Preparation persistence test",
   geographies: ["Germany"],
-  accountCategories: ["VISITOR_ATTRACTION"],
+  accountCategories: ["MUNICIPAL_CITY_EVENTS_ORGANISATION", "DESTINATION_TOURISM_ORGANISATION"],
   buyerRoles: ["Managing Director"],
 };
 
@@ -34,7 +34,7 @@ const prepared = {
   },
   targetProfile: {
     geographies: ["Germany"],
-    accountCategories: ["VISITOR_ATTRACTION"],
+    accountCategories: ["MUNICIPAL_CITY_EVENTS_ORGANISATION", "DESTINATION_TOURISM_ORGANISATION"],
     excludedCategories: [],
     productFocus: "THE_MONSTER",
     requiredSignals: [],
