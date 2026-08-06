@@ -3,7 +3,7 @@ import { z } from "zod";
 import {
   ContactRequirementSchema,
   ProductFocusSchema,
-  ProspectCategorySchema,
+  ProspectCategorySelectionSchema,
 } from "@/lib/sales/mission-schema";
 import { ABSOLUTE_SCOUT_LIMITS, ABSOLUTE_LIMITS_VERSION } from "@/lib/settings/absolute-limits";
 
@@ -15,7 +15,7 @@ export const ScoutSettingsSchema = z.object({
   missionDefaults: z.object({
     owner: boundedText,
     geographies: z.array(boundedText).min(1).max(20),
-    accountCategories: z.array(ProspectCategorySchema).min(1).max(8),
+    accountCategories: ProspectCategorySelectionSchema,
     productFocus: ProductFocusSchema,
     contactRequirement: ContactRequirementSchema,
     buyerRoles: z.array(boundedText).min(1).max(20),

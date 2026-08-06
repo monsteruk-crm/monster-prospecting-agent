@@ -14,6 +14,7 @@ import {
   SearchStrategySchema,
   TargetProfileSchema,
   VerifiedBuyingSignalSchema,
+  type ProspectAccountClassification,
   type Budget,
   type DiscoveredAccount,
   type FetchedSourceReference,
@@ -23,6 +24,7 @@ import {
   type TargetProfile,
   type VerifiedBuyingSignal,
 } from "@/lib/sales/mission-schema";
+import { coerceProspectAccountClassification } from "@/lib/sales/prospect-taxonomy";
 import { scoreProspectAccount } from "@/lib/sales/score-engine";
 import { deriveContactRoutes } from "@/lib/sales/contact-route-engine";
 import { getDomain } from "tldts";
@@ -314,8 +316,8 @@ export async function persistDiscoveryResult(
   const searchResults = z.array(SearchResultSchema).parse(rawInput.searchResults);
   const fetchedSources = z.array(FetchedSourceReferenceSchema).parse(rawInput.fetchedSources);
   const accounts = z.array(DiscoveredAccountSchema).parse(rawInput.accounts);
-    const buyingSignals = z.array(VerifiedBuyingSignalSchema).parse(rawInput.buyingSignals);
-    const persistedAt = new Date();
+  const buyingSignals = z.array(VerifiedBuyingSignalSchema).parse(rawInput.buyingSignals);
+  const persistedAt = new Date();
 
   return client.$transaction(async (transaction) => {
     await persistPreparedMissionRows(transaction, prepared);
@@ -360,7 +362,7 @@ export async function persistDiscoveryResult(
           website: persistedAccount.website,
           country: persistedAccount.country,
           city: persistedAccount.city,
-          categories: asJson(persistedAccount.categories),
+          categories: asJson(persistedAccount.classification),
           relevanceHypothesis: persistedAccount.relevanceHypothesis,
           discoveredSignals: asJson(persistedAccount.discoveredSignals),
           possibleBuyerRoles: asJson(persistedAccount.possibleBuyerRoles),
@@ -377,7 +379,7 @@ export async function persistDiscoveryResult(
           website: persistedAccount.website,
           country: persistedAccount.country,
           city: persistedAccount.city,
-          categories: asJson(persistedAccount.categories),
+          categories: asJson(persistedAccount.classification),
           relevanceHypothesis: persistedAccount.relevanceHypothesis,
           discoveredSignals: asJson(persistedAccount.discoveredSignals),
           possibleBuyerRoles: asJson(persistedAccount.possibleBuyerRoles),

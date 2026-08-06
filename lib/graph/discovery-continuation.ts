@@ -24,6 +24,7 @@ import {
   AccountExtractionCandidateSchema,
   type Budget,
 } from "@/lib/sales/mission-schema";
+import { coerceProspectAccountClassification } from "@/lib/sales/prospect-taxonomy";
 import { z } from "zod";
 import { ABSOLUTE_SCOUT_LIMITS } from "@/lib/settings/absolute-limits";
 
@@ -101,7 +102,7 @@ export async function continueDiscoveryRun(
     website: account.website ?? undefined,
     country: account.country ?? undefined,
     city: account.city ?? undefined,
-    categories: account.categories,
+    classification: coerceProspectAccountClassification(account.categories),
     relevanceHypothesis: account.relevanceHypothesis,
     discoveredSignals: account.discoveredSignals,
     possibleBuyerRoles: account.possibleBuyerRoles,
@@ -125,7 +126,7 @@ export async function continueDiscoveryRun(
         website: account.website,
         country: account.country ?? null,
         city: account.city ?? null,
-        categories: account.categories,
+        classification: coerceProspectAccountClassification(account.categories),
         relevanceHypothesis: account.relevanceHypothesis,
         possibleBuyerRoles: account.possibleBuyerRoles,
         buyingSignals: [],

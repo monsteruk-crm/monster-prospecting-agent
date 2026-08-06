@@ -342,7 +342,7 @@ function toDiscoveredAccount(candidate: AccountExtractionCandidate) {
     website: candidate.finalUrl,
     ...(candidate.account.country ? { country: candidate.account.country } : {}),
     ...(candidate.account.city ? { city: candidate.account.city } : {}),
-    categories: candidate.account.categories,
+    classification: candidate.account.classification,
     relevanceHypothesis: candidate.account.relevanceHypothesis,
     discoveredSignals: [],
     possibleBuyerRoles: candidate.account.possibleBuyerRoles,

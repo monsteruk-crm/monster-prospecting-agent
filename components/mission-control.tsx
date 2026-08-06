@@ -3,6 +3,9 @@
 import {useEffect, useState, type FormEvent} from "react";
 import Link from "next/link";
 
+import { ProspectAccountCategoryPicker } from "@/components/prospect-account-category-picker";
+import { getProspectCategoryDefinition, type ProspectAccountCategory } from "@/lib/sales/prospect-taxonomy";
+
 type SmokeResponse = { missionTitle?: string; status?: "ready"; error?: { code: string; message: string } };
 type ContactRoute = {
     targetRole: string;
@@ -48,7 +51,12 @@ type DossierAccount = {
     website: string | null;
     country: string | null;
     city: string | null;
-    categories: string[];
+    classification: {
+        primaryCategory: string;
+        secondaryCategories: string[];
+        subtypes?: string[];
+        buyerModel: string
+    };
     relevanceHypothesis: string;
     possibleBuyerRoles: string[];
     unresolvedQuestions: string[];
@@ -117,7 +125,15 @@ function commaList(value: string): string[] {
 
 function contactRouteKey(route: ContactRoute, index: number): string {
     const value = route.phone ?? route.contactPageUrl ?? route.professionalProfileUrl ?? route.email ?? route.routeType;
-    return `${route.targetRole}-${route.routeType}-${value}-${route.sourceEvidenceIds[0] ?? index}`;
+    return `${route.targetRole}-${route.routeType}-${value}-${route.sourceEvidenceIds.join(",")}-${index}`;
+}
+
+const runStageOrder = ["TARGET_PROFILE", "SEARCH_STRATEGY", "SEARCH_PROVIDER", "OFFICIAL_SOURCE_FETCH", "ACCOUNT_EXTRACTION", "BUYING_SIGNAL_VERIFICATION", "CONTACT", "SCORE_RECALCULATION", "READY_FOR_REVIEW"];
+
+function runProgressPercent(discoveryStage: string, status: string): number {
+    if (status !== "RUNNING") return 100;
+    const stageIndex = runStageOrder.findIndex((stage) => discoveryStage.includes(stage));
+    return Math.min(96, Math.max(8, Math.round(((stageIndex < 0 ? 0 : stageIndex + 1) / runStageOrder.length) * 100)));
 }
 
 async function readNdjson(response: Response, onMessage: (message: Record<string, unknown>) => void) {
@@ -154,7 +170,7 @@ export function MissionControl({ mode = "legacy", initialRunId = "" }: { mode?: 
     const [missionName, setMissionName] = useState("MVP sales hunt");
     const [owner, setOwner] = useState("Nick");
     const [geography, setGeography] = useState("United Kingdom");
-    const [accountCategory, setAccountCategory] = useState("TICKETED_EVENT_PROMOTER");
+    const [accountCategories, setAccountCategories] = useState<ProspectAccountCategory[]>([]);
     const [productFocus, setProductFocus] = useState("THE_MONSTER");
     const [contactRequirement, setContactRequirement] = useState("ANY_ROUTE");
     const [buyerRole, setBuyerRole] = useState("Managing Director");
@@ -171,11 +187,26 @@ export function MissionControl({ mode = "legacy", initialRunId = "" }: { mode?: 
     const [isRecordingGap, setIsRecordingGap] = useState(false);
 
     useEffect(() => {
-        if (mode === "run" && initialRunId) {
-            setRunId(initialRunId);
-            setIsLoadingDossier(true);
-            void loadDossierById(initialRunId).catch((error) => setDossierError(error instanceof Error ? error.message : "The mission could not be loaded.")).finally(() => setIsLoadingDossier(false));
-        }
+        if (mode !== "run" || !initialRunId) return undefined;
+        let stopped = false;
+        setRunId(initialRunId);
+        setIsLoadingDossier(true);
+        const refresh = async () => {
+            try {
+                const next = await loadDossierById(initialRunId);
+                if (!stopped && next.status !== "RUNNING") window.clearInterval(interval);
+            } catch (error) {
+                if (!stopped) setDossierError(error instanceof Error ? error.message : "The mission could not be loaded.");
+            } finally {
+                if (!stopped) setIsLoadingDossier(false);
+            }
+        };
+        const interval = window.setInterval(() => void refresh(), 1500);
+        void refresh();
+        return () => {
+            stopped = true;
+            window.clearInterval(interval);
+        };
     }, [initialRunId, mode]);
 
     useEffect(() => {
@@ -266,7 +297,7 @@ export function MissionControl({ mode = "legacy", initialRunId = "" }: { mode?: 
                     name: missionName,
                     owner,
                     geographies: commaList(geography),
-                    accountCategories: [accountCategory],
+                    accountCategories,
                     productFocus,
                     contactRequirement,
                     requiredSignals: commaList(requiredSignals),
@@ -475,7 +506,11 @@ export function MissionControl({ mode = "legacy", initialRunId = "" }: { mode?: 
         }
     }
 
-    if (mode === "run") return <section className="mx-auto max-w-6xl"><header className="page-heading"><div><p className="eyebrow">Mission</p><h1>{dossier?.mission.name ?? "Loading mission…"}</h1><p>{dossier ? `${dossier.accounts.length} accounts · ${dossier.status.toLowerCase()}` : "Restoring the saved research run."}</p></div><Link href="/runs" className="secondary-button">All runs</Link></header>{dossierError ? <p className="alert alert-error mt-6" role="alert">{dossierError}</p> : null}{isLoadingDossier ? <div className="major-surface mt-8"><p className="text-white/55">Loading evidence and activity…</p></div> : null}{dossier ? <><div className="mt-8 grid gap-5 lg:grid-cols-[180px_1fr]"><ol className="major-surface space-y-4 text-sm">{["Brief", "Market search", "Accounts", "Signals", "Contacts", "Review"].map((stage, index) => <li key={stage} className={index < 3 ? "text-[#36d399]" : "text-white/55"}><span className="mr-2 font-mono text-xs">0{index + 1}</span>{stage}</li>)}</ol><div><LiveOutputPanel output={liveOutput} running={dossier.status === "RUNNING"} /></div></div><DossierView dossier={dossier} isDeciding={isDeciding} isDrafting={isDrafting} isExporting={isExporting} isContinuing={isContinuing} isContactEnriching={isContactEnriching} isRecordingGap={isRecordingGap} researchGap={researchGap} onResearchGapChange={setResearchGap} onResearchGap={recordResearchGap} onContinue={continueSearch} onContactEnrich={enrichContacts} onExport={exportApprovedLeads} onDecision={decideReview} onDraft={draftFirstMove} /></> : null}</section>;
+    if (mode === "run") {
+        const latestEvent = liveOutput.at(-1);
+        const progress = dossier ? runProgressPercent(dossier.discoveryStage, dossier.status) : 0;
+        return <section className="mx-auto max-w-6xl"><header className="page-heading"><div><p className="eyebrow">Mission</p><h1>{dossier?.mission.name ?? "Loading mission…"}</h1><p>{dossier ? `${dossier.accounts.length} accounts · ${dossier.status.toLowerCase()}` : "Restoring the saved research run."}</p></div><Link href="/runs" className="secondary-button">All runs</Link></header>{dossierError ? <p className="alert alert-error mt-6" role="alert">{dossierError}</p> : null}{isLoadingDossier ? <div className="major-surface mt-8"><p className="text-white/55">Loading evidence and activity…</p></div> : null}{dossier ? <><div className="major-surface mt-8"><div className="flex flex-wrap items-center justify-between gap-3"><div><p className="eyebrow text-[#36d399]">{dossier.status === "RUNNING" ? "Research in progress" : "Research complete"}</p><p className="mt-2 text-sm text-white/70">{latestEvent?.message ?? "Restoring saved mission activity…"}</p></div><span className="font-mono text-sm text-white/55">{liveOutput.length} events</span></div><div className="mt-5 h-2 overflow-hidden rounded-full bg-white/10"><div className="h-full rounded-full bg-[#36d399] transition-[width] duration-500" style={{ width: `${progress}%` }} /></div><div className="mt-2 flex justify-between text-xs text-white/40"><span>{dossier.discoveryStage}</span><span>{progress}%</span></div></div><div className="mt-8 grid gap-5 lg:grid-cols-[180px_1fr]"><ol className="major-surface space-y-4 text-sm">{["Brief", "Market search", "Accounts", "Signals", "Contacts", "Review"].map((stage, index) => <li key={stage} className={index < Math.max(1, Math.round(progress / 100 * 6)) ? "text-[#36d399]" : "text-white/55"}><span className="mr-2 font-mono text-xs">0{index + 1}</span>{stage}</li>)}</ol><div><LiveOutputPanel output={liveOutput} running={dossier.status === "RUNNING"} /></div></div><DossierView dossier={dossier} isDeciding={isDeciding} isDrafting={isDrafting} isExporting={isExporting} isContinuing={isContinuing} isContactEnriching={isContactEnriching} isRecordingGap={isRecordingGap} researchGap={researchGap} onResearchGapChange={setResearchGap} onResearchGap={recordResearchGap} onContinue={continueSearch} onContactEnrich={enrichContacts} onExport={exportApprovedLeads} onDecision={decideReview} onDraft={draftFirstMove} /></> : null}</section>;
+    }
 
     return <main
         className="scout-grid min-h-screen overflow-hidden bg-[#0a0d12] px-5 py-6 text-[#f5f7fa] sm:px-8 lg:px-12">
@@ -553,19 +588,8 @@ export function MissionControl({ mode = "legacy", initialRunId = "" }: { mode?: 
                                 className="text-xs text-white/50">Geography or regions<input value={geography}
                                                                                              onChange={(event) => setGeography(event.target.value)}
                                                                                              placeholder="United Kingdom, Ireland"
-                                                                                             className="mt-1 w-full rounded-xl border border-white/15 bg-black/20 px-3 py-2 text-sm text-white"
-                                                                                             required/></label><label
-                                className="text-xs text-white/50">Account category<select value={accountCategory}
-                                                                                          onChange={(event) => setAccountCategory(event.target.value)}
-                                                                                          className="mt-1 w-full rounded-xl border border-white/15 bg-black/20 px-3 py-2 text-sm text-white">
-                                <option value="TICKETED_EVENT_PROMOTER">Ticketed event promoter</option>
-                                <option value="FAMILY_ATTRACTION_OPERATOR">Family attraction operator</option>
-                                <option value="FESTIVAL_PRODUCER">Festival producer</option>
-                                <option value="EXPERIENTIAL_EVENT_AGENCY">Experiential event agency</option>
-                                <option value="VISITOR_ATTRACTION">Visitor attraction</option>
-                                <option value="HOLIDAY_RESORT">Holiday resort</option>
-                                <option value="COMPARABLE_ATTRACTION_OPERATOR">Comparable attraction operator</option>
-                            </select></label><label className="text-xs text-white/50">Product focus<select
+                                className="mt-1 w-full rounded-xl border border-white/15 bg-black/20 px-3 py-2 text-sm text-white"
+                                                                                             required/></label><div className="sm:col-span-2 lg:col-span-3"><ProspectAccountCategoryPicker value={accountCategories} onChange={setAccountCategories} error={accountCategories.length === 0 && launchStatus ? "Select at least one target account category." : undefined} /></div><label className="text-xs text-white/50">Product focus<select
                                 value={productFocus} onChange={(event) => setProductFocus(event.target.value)}
                                 className="mt-1 w-full rounded-xl border border-white/15 bg-black/20 px-3 py-2 text-sm text-white">
                                 <option value="THE_MONSTER">The Monster</option>
@@ -766,7 +790,7 @@ function DossierView({
                 <div><p className="text-xs uppercase tracking-[0.14em] text-white/35">Geographies</p><p
                     className="mt-1 text-white/80">{dossier.mission.brief.geographies.join(", ")}</p></div>
                 <div><p className="text-xs uppercase tracking-[0.14em] text-white/35">Account categories</p><p
-                    className="mt-1 text-white/80">{dossier.mission.brief.accountCategories.join(", ")}</p></div>
+                    className="mt-1 text-white/80">{dossier.mission.brief.accountCategories.map((category) => getProspectCategoryDefinition(category as ProspectAccountCategory).label).join(", ")}</p></div>
                 <div><p className="text-xs uppercase tracking-[0.14em] text-white/35">Product focus</p><p
                     className="mt-1 text-white/80">{dossier.mission.brief.productFocus}</p></div>
                 <div><p className="text-xs uppercase tracking-[0.14em] text-white/35">Contact requirement</p><p
@@ -847,6 +871,9 @@ function AccountDossier({account, isDrafting, canDraft, emailOnly, onDraft}: {
             <div><p className="text-xs font-bold uppercase tracking-[0.16em] text-white/40">Prospect account</p><h4
                 className="mt-1 text-xl font-bold">{account.companyName}</h4><p
                 className="mt-1 text-sm text-white/50">{[account.city, account.country].filter(Boolean).join(", ") || "Location unknown"}</p>
+                <p className="mt-2 text-xs uppercase tracking-[0.14em] text-white/35">Classification</p>
+                <p className="mt-1 text-sm text-white/75">{getProspectCategoryDefinition(account.classification.primaryCategory as ProspectAccountCategory).label}{account.classification.secondaryCategories.length > 0 ? ` · ${account.classification.secondaryCategories.map((category) => getProspectCategoryDefinition(category as ProspectAccountCategory).label).join(", ")}` : ""}</p>
+                <p className="mt-1 text-xs text-white/45">Buyer model: {account.classification.buyerModel}</p>
             </div>
             <div className="text-right"><p className="text-3xl font-black text-[#f5c542]">{score?.total ?? "—"}</p><p
                 className="text-[10px] font-bold uppercase tracking-[0.16em] text-white/40">{score?.scoreState ?? "UNSCORED"}</p>

@@ -69,7 +69,7 @@ The discovery route uses the LangGraph Postgres checkpointer and interrupts afte
 
 ## Live progress, query history and continuation
 
-- `POST /api/missions/discover/stream` accepts the same brief and returns newline-delimited JSON messages: `run_started`, `search_progress`, `progress`, `completed` or `error`. Mission Control uses this route to show live stage and query output.
+- `POST /api/missions/discover/stream` accepts the same brief and returns newline-delimited JSON messages: `run_started`, `search_progress`, `progress`, `completed` or `error`. The New mission screen shows the launch stream, while the Scout home and `/runs/:id` screen poll the persisted dossier so progress remains visible after navigation or refresh.
 - `GET /api/runs?limit=20` returns recent persisted run IDs, mission names, statuses, stages and review statuses.
 - `GET /api/runs/:missionRunId` includes the saved `MISSION_PROGRESS` and `MISSION_SEARCH_PROGRESS` audit events. Search progress records the executed query, query status, result count, cumulative bounded search results and search usage.
 - `POST /api/runs/:missionRunId/search-more` accepts optional `additionalSearches`, `additionalPages`, `additionalModelCalls` and `additionalCostUsd`. It reuses the saved mission strategy and evidence, asks DuckDuckGo for a deeper result window, excludes previously saved URLs, and persists the new results to the same run. Defaults are 7 searches, 20 pages, 12 model calls and USD 2; all values remain bounded.

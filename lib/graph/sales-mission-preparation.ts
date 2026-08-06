@@ -24,6 +24,7 @@ import {
   type SalesMissionBriefInput,
 } from "@/lib/sales/mission-schema";
 import { requiresPublicEmail } from "@/lib/sales/contact-route-engine";
+import { getProspectCategoryDefinition } from "@/lib/sales/prospect-taxonomy";
 
 export const SALES_MISSION_GRAPH_VERSION = "act-1-preparation-v1";
 
@@ -82,38 +83,42 @@ const buildTargetProfile: GraphNode<SalesMissionGraphStateType> = (state) => {
 const buildSearchStrategy: GraphNode<SalesMissionGraphStateType> = (state) => {
   const brief = SalesMissionBriefSchema.parse(state.brief);
   const geography = brief.geographies.join(" OR ");
-  const categories = brief.accountCategories.join(" OR ");
+  const categoryLabels = brief.accountCategories.map((category) => getProspectCategoryDefinition(category).label).join(" OR ");
+  const categoryHints = brief.accountCategories
+    .flatMap((category) => getProspectCategoryDefinition(category).searchHints.slice(0, 2))
+    .slice(0, 6)
+    .join(" OR ");
   const signals = [...brief.requiredSignals, ...brief.preferredSignals].join(" OR ") || "new programme expansion partnership";
   const remainingQueries = { value: brief.limits.maxSearches };
 
   const candidates = [
     {
       kind: "CATEGORY_DISCOVERY" as const,
-      queries: [`${categories} ${geography}`],
+      queries: [`${categoryLabels || categoryHints} ${geography}`.trim()],
     },
     {
       kind: "GEOGRAPHY_DISCOVERY" as const,
-      queries: [`ticketed events attractions ${geography}`],
+      queries: [`${categoryHints || categoryLabels || "ticketed events attractions"} ${geography}`.trim()],
     },
     {
       kind: "EVENT_PORTFOLIO_DISCOVERY" as const,
-      queries: [`${categories} event programme ${geography}`],
+      queries: [`${categoryLabels || categoryHints} event programme ${geography}`.trim()],
     },
     {
       kind: "SIGNAL_DISCOVERY" as const,
-      queries: [`${categories} ${signals} ${geography}`],
+      queries: [`${categoryHints || categoryLabels} ${signals} ${geography}`.trim()],
     },
     {
       kind: "BUYER_ROLE_DISCOVERY" as const,
-      queries: brief.buyerRoles.slice(0, 2).map((role) => `${role} ${categories} ${geography}`),
+      queries: brief.buyerRoles.slice(0, 2).map((role) => `${role} ${categoryLabels || categoryHints} ${geography}`.trim()),
     },
     {
       kind: "CONTACT_ROUTE_DISCOVERY" as const,
-      queries: [`${categories} ${requiresPublicEmail(brief) ? "email contact" : "partnerships contact"} ${geography}`],
+      queries: [`${categoryLabels || categoryHints} ${requiresPublicEmail(brief) ? "email contact" : "partnerships contact"} ${geography}`.trim()],
     },
     {
       kind: "COMPARABLE_ATTRACTION_DISCOVERY" as const,
-      queries: [`comparable attractions operators ${geography}`],
+      queries: [`comparable ${categoryLabels || categoryHints || "attractions operators"} ${geography}`.trim()],
     },
   ];
 

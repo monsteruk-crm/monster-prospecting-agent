@@ -1,5 +1,6 @@
 import { z } from "zod";
 
+import { getProspectCategoryDefinition } from "@/lib/sales/prospect-taxonomy";
 import {
   type DiscoveredAccount,
   type SalesMissionBrief,
@@ -21,23 +22,13 @@ export const ProspectScoreSchema = z.object({
 
 export type ProspectScore = z.infer<typeof ProspectScoreSchema>;
 
-const eligibleCategories = new Set([
-  "TICKETED_EVENT_PROMOTER",
-  "FAMILY_ATTRACTION_OPERATOR",
-  "FESTIVAL_PRODUCER",
-  "TOURING_EVENT_OPERATOR",
-  "EXPERIENTIAL_EVENT_AGENCY",
-  "VENUE_PROGRAMMING_COMPANY",
-  "EXHIBITION_OPERATOR",
-  "LEISURE_DESTINATION_GROUP",
-  "HOLIDAY_RESORT",
-  "VISITOR_ATTRACTION",
-  "MIXED_USE_DESTINATION",
-  "CITY_EVENT_CONTRACTOR",
-  "SPORTS_ENTERTAINMENT_OPERATOR",
-  "REGIONAL_OPERATING_PARTNER",
-  "COMPARABLE_ATTRACTION_OPERATOR",
-]);
+function isProductFit(category: DiscoveredAccount["classification"]["primaryCategory"], productFocus: SalesMissionBrief["productFocus"]): boolean {
+  const fit = getProspectCategoryDefinition(category).likelyProductFit;
+  if (productFocus === "UNDECIDED") {
+    return fit !== "UNDECIDED";
+  }
+  return fit === "BOTH" || fit === productFocus;
+}
 
 export function scoreProspectAccount(
   account: DiscoveredAccount,
@@ -56,7 +47,8 @@ export function scoreProspectAccount(
     : accountSignals.some((signal) => signal.verified && signal.freshness === "RECENT")
       ? 20
       : accountSignals.length > 0 ? 8 : 0;
-  const monsterRelevance = account.categories.some((category) => eligibleCategories.has(category))
+  const accountCategories = [account.classification.primaryCategory, ...account.classification.secondaryCategories];
+  const monsterRelevance = accountCategories.some((category) => isProductFit(category, brief.productFocus))
     ? account.relevanceHypothesis.length >= 40 ? 20 : 15
     : 5;
   const usableRoutes = contactRoutes.filter((route) => route.isUsableForSales && route.routeType !== "ROLE_ONLY");

@@ -6,27 +6,19 @@ import {
   PublicPhoneHintSchema,
 } from "@/lib/tools/safe-fetch";
 import { ABSOLUTE_SCOUT_LIMITS } from "@/lib/settings/absolute-limits";
+import {
+  ProspectAccountCategorySchema,
+  ProspectAccountClassificationSchema,
+  ProspectBuyerModelSchema,
+  ProspectCategorySelectionSchema,
+  type ProspectAccountCategory,
+  type ProspectAccountClassification,
+  type ProspectBuyerModel,
+} from "@/lib/sales/prospect-taxonomy";
 
 const nonEmptyText = z.string().trim().min(1);
 const boundedList = z.array(nonEmptyText).max(20);
-
-export const ProspectCategorySchema = z.enum([
-  "TICKETED_EVENT_PROMOTER",
-  "FAMILY_ATTRACTION_OPERATOR",
-  "FESTIVAL_PRODUCER",
-  "TOURING_EVENT_OPERATOR",
-  "EXPERIENTIAL_EVENT_AGENCY",
-  "VENUE_PROGRAMMING_COMPANY",
-  "EXHIBITION_OPERATOR",
-  "LEISURE_DESTINATION_GROUP",
-  "HOLIDAY_RESORT",
-  "VISITOR_ATTRACTION",
-  "MIXED_USE_DESTINATION",
-  "CITY_EVENT_CONTRACTOR",
-  "SPORTS_ENTERTAINMENT_OPERATOR",
-  "REGIONAL_OPERATING_PARTNER",
-  "COMPARABLE_ATTRACTION_OPERATOR",
-]);
+export const ProspectCategorySchema = ProspectAccountCategorySchema;
 
 export const ProductFocusSchema = z.enum([
   "THE_MONSTER",
@@ -48,7 +40,7 @@ export const SalesMissionBriefSchema = z.object({
   name: nonEmptyText.max(120),
   owner: nonEmptyText.max(120).default("unassigned"),
   geographies: z.array(nonEmptyText).min(1).max(20),
-  accountCategories: z.array(ProspectCategorySchema).min(1).max(8),
+  accountCategories: ProspectCategorySelectionSchema,
   productFocus: ProductFocusSchema.default("THE_MONSTER"),
   contactRequirement: ContactRequirementSchema.default("ANY_ROUTE"),
   requiredSignals: boundedList.default(() => []),
@@ -62,7 +54,7 @@ export const SalesMissionBriefSchema = z.object({
 
 export const TargetProfileSchema = z.object({
   geographies: z.array(nonEmptyText).min(1),
-  accountCategories: z.array(ProspectCategorySchema).min(1),
+  accountCategories: ProspectCategorySelectionSchema,
   excludedCategories: z.array(nonEmptyText),
   productFocus: ProductFocusSchema,
   requiredSignals: z.array(nonEmptyText),
@@ -168,7 +160,7 @@ export const AccountExtractionProposalSchema = z.object({
   website: z.string().trim().max(2048).nullable(),
   country: z.string().trim().min(2).max(100).nullable(),
   city: z.string().trim().min(1).max(100).nullable(),
-  categories: z.array(ProspectCategorySchema).min(1).max(8),
+  classification: ProspectAccountClassificationSchema,
   relevanceHypothesis: z.string().trim().min(1).max(1000),
   possibleBuyerRoles: z.array(z.string().trim().min(1).max(200)).max(20),
   buyingSignals: z.array(AccountBuyingSignalExtractionSchema).max(10),
@@ -246,7 +238,7 @@ export const DiscoveredAccountSchema = z.object({
   website: z.string().url().optional(),
   country: z.string().trim().min(2).max(100).optional(),
   city: z.string().trim().min(1).max(100).optional(),
-  categories: z.array(ProspectCategorySchema).min(1),
+  classification: ProspectAccountClassificationSchema,
   relevanceHypothesis: nonEmptyText.max(1000),
   discoveredSignals: z.array(nonEmptyText),
   possibleBuyerRoles: z.array(nonEmptyText),
@@ -307,3 +299,4 @@ export type AccountExtractionCandidate = z.infer<typeof AccountExtractionCandida
 export type BuyingSignalCandidate = z.infer<typeof BuyingSignalCandidateSchema>;
 export type BuyingSignalVerificationBatch = z.infer<typeof BuyingSignalVerificationBatchSchema>;
 export type VerifiedBuyingSignal = z.infer<typeof VerifiedBuyingSignalSchema>;
+export type { ProspectAccountCategory, ProspectAccountClassification, ProspectBuyerModel };

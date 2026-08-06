@@ -24,6 +24,7 @@ import {
   VerifiedBuyingSignalSchema,
   type Budget,
 } from "@/lib/sales/mission-schema";
+import { coerceProspectAccountClassification } from "@/lib/sales/prospect-taxonomy";
 
 export const ContactContinuationRequestSchema = z.object({
   additionalSearches: z.number().int().min(0).max(1).default(1),
@@ -77,12 +78,12 @@ export async function continueContactEnrichment(missionRunId: string, accountId:
     const account = run.accounts.find((candidate) => candidate.id === source.accountId);
     return FetchedSourceReferenceSchema.parse({ sourceUrl: source.sourceUrl, finalUrl: source.finalUrl, status: source.status, mimeType: source.mimeType, title: source.title ?? undefined, readableExcerpt: source.readableExcerpt, byteCount: source.byteCount, contentHash: source.contentHash, retrievedAt: source.retrievedAt.toISOString(), redirectCount: source.redirectCount, searchQuery: source.searchQuery, ...sourceMetadataFromRoutes(account?.contactRoutes) });
   });
-  const accounts = run.accounts.map((account) => DiscoveredAccountSchema.parse({ accountKey: account.accountKey, companyName: account.companyName, officialDomain: account.officialDomain ?? undefined, website: account.website ?? undefined, country: account.country ?? undefined, city: account.city ?? undefined, categories: account.categories, relevanceHypothesis: account.relevanceHypothesis, discoveredSignals: account.discoveredSignals, possibleBuyerRoles: account.possibleBuyerRoles, discoveryEvidenceIds: account.discoveryEvidenceIds, unresolvedQuestions: account.unresolvedQuestions }));
+  const accounts = run.accounts.map((account) => DiscoveredAccountSchema.parse({ accountKey: account.accountKey, companyName: account.companyName, officialDomain: account.officialDomain ?? undefined, website: account.website ?? undefined, country: account.country ?? undefined, city: account.city ?? undefined, classification: coerceProspectAccountClassification(account.categories), relevanceHypothesis: account.relevanceHypothesis, discoveredSignals: account.discoveredSignals, possibleBuyerRoles: account.possibleBuyerRoles, discoveryEvidenceIds: account.discoveryEvidenceIds, unresolvedQuestions: account.unresolvedQuestions }));
   const sourceByHash = new Map(sources.map((source) => [source.contentHash, source]));
   const extractionCandidates = run.accounts.flatMap((account) => {
     const evidenceId = z.array(z.string()).parse(account.discoveryEvidenceIds).find((id) => id.startsWith("source:"));
     const source = evidenceId ? sourceByHash.get(evidenceId.slice(7)) : undefined;
-    return source ? [AccountExtractionCandidateSchema.parse({ accountKey: account.accountKey, sourceUrl: source.sourceUrl, finalUrl: source.finalUrl, sourceContentHash: source.contentHash, sourceExcerpt: source.readableExcerpt, account: { companyName: account.companyName, officialDomain: account.officialDomain, website: account.website, country: account.country ?? null, city: account.city ?? null, categories: account.categories, relevanceHypothesis: account.relevanceHypothesis, possibleBuyerRoles: account.possibleBuyerRoles, buyingSignals: [], unresolvedQuestions: account.unresolvedQuestions } })] : [];
+    return source ? [AccountExtractionCandidateSchema.parse({ accountKey: account.accountKey, sourceUrl: source.sourceUrl, finalUrl: source.finalUrl, sourceContentHash: source.contentHash, sourceExcerpt: source.readableExcerpt, account: { companyName: account.companyName, officialDomain: account.officialDomain, website: account.website, country: account.country ?? null, city: account.city ?? null, classification: coerceProspectAccountClassification(account.categories), relevanceHypothesis: account.relevanceHypothesis, possibleBuyerRoles: account.possibleBuyerRoles, buyingSignals: [], unresolvedQuestions: account.unresolvedQuestions } })] : [];
   });
   const signals = run.buyingSignals.flatMap((signal) => {
     const source = sourceByHash.get(signal.sourceContentHash);
