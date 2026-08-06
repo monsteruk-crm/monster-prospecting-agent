@@ -36,6 +36,7 @@ function extractionResult(): AccountExtractionProposal {
     classification: {
       primaryCategory: "TICKETED_EVENT_PROMOTER" as const,
       secondaryCategories: ["PUBLIC_EVENT_CONTRACTOR"],
+      subtypes: [],
       buyerModel: "PROMOTER" as const,
     },
     relevanceHypothesis: "The organisation appears to operate public ticketed programmes.",
@@ -55,6 +56,7 @@ function extractionResult(): AccountExtractionProposal {
 function extractionDependencies() {
   return {
     extractAccount: vi.fn(async () => extractionResult()),
+    extractContacts: vi.fn(async () => ({ contacts: [] })),
     verifySignals: vi.fn(async ({ signals }: { signals: Array<{ candidateId: string; evidenceExcerpt: string }> }) => ({
       signals: signals.map((signal) => ({
         candidateId: signal.candidateId,
@@ -73,6 +75,8 @@ async function preparedMission(
   limits?: Partial<{
     maxSearches: number;
     maxPages: number;
+    maxModelCalls: number;
+    maxCandidateAccounts: number;
   }>,
   options: Partial<{ contactRequirement: "ANY_ROUTE" | "PUBLIC_EMAIL"; instructions: string }> = {},
 ): Promise<PreparedSalesMissionForDiscovery> {
@@ -86,6 +90,8 @@ async function preparedMission(
     limits: {
       maxSearches: limits?.maxSearches ?? 2,
       maxPages: limits?.maxPages ?? 2,
+      maxModelCalls: limits?.maxModelCalls ?? 20,
+      maxCandidateAccounts: limits?.maxCandidateAccounts ?? 5,
     },
   });
 
@@ -112,6 +118,8 @@ describe("sales mission discovery graph", () => {
     expect(isLikelyNonFirstPartySource("https://www.merriam-webster.com/dictionary/family")).toBe(true);
     expect(isLikelyNonFirstPartySource("https://www.anydesk.com/en/downloads/windows")).toBe(true);
     expect(isLikelyNonFirstPartySource("https://anydesk.en.softonic.com/")).toBe(true);
+    expect(isLikelyNonFirstPartySource("https://www.youtube.com/watch?v=1UFou72pWWc")).toBe(true);
+    expect(isLikelyNonFirstPartySource("https://www.wikihow.com/Types-of-Family")).toBe(true);
     expect(isLikelyNonFirstPartySource("https://example.org/downloads/guide")).toBe(true);
     expect(isLikelyNonFirstPartySource("https://example.org/events/programme")).toBe(false);
   });

@@ -10,8 +10,10 @@ import { z } from "zod";
 
 import {
   extractAccountFromSource,
+  extractPublicContacts,
   verifyBuyingSignals,
   type AccountExtractor,
+  type PublicContactExtractor,
   type BuyingSignalVerifier,
 } from "@/lib/chains/account-extraction";
 import {
@@ -53,7 +55,7 @@ import {
   type SafeFetchInput,
   type SafeFetchResult,
 } from "@/lib/tools/safe-fetch";
-import { deriveContactRoutes, extractPublicEmail, requiresPublicEmail } from "@/lib/sales/contact-route-engine";
+import { deriveContactRoutes, effectiveBuyerRoles, extractPublicEmail, requiresPublicEmail } from "@/lib/sales/contact-route-engine";
 import {
   MissionProgressEventSchema,
   MissionSearchProgressEventSchema,
@@ -68,6 +70,8 @@ import { logRuntimeError } from "@/lib/observability/runtime-logger";
 export const SALES_MISSION_DISCOVERY_GRAPH_VERSION = "act-1-discovery-v1";
 const MAX_SEARCH_RESULTS_PER_QUERY = 100;
 const MAX_EXCERPT_LENGTH = 600;
+const CONTACT_SEARCHES_PER_ACCOUNT = 1;
+const CONTACT_PAGES_PER_ACCOUNT = 3;
 
 const appendOnly = <T extends z.ZodType>(schema: T) =>
   new ReducedValue(z.array(schema).default(() => []), {
@@ -139,6 +143,7 @@ export interface SalesMissionDiscoveryDependencies {
   searchProvider?: SearchProvider;
   fetchSource?: FetchSource;
   extractAccount?: AccountExtractor;
+  extractContacts?: PublicContactExtractor;
   verifySignals?: BuyingSignalVerifier;
   now?: () => Date;
   checkpointer?: PostgresSaver;
@@ -238,6 +243,9 @@ const NON_FIRST_PARTY_HOST_MARKERS = [
   "academia.",
   "researchgate.",
   "medium.",
+  "youtube.",
+  "youtu.be",
+  "wikihow.",
 ];
 
 const NON_FIRST_PARTY_PATH_PATTERNS = [
@@ -368,7 +376,13 @@ function createSearchProviderNode(
       };
     }
     const queries = state.searchStrategy.queryFamilies.flatMap((family) => family.queries);
-    const searchBudgetRemaining = Math.max(0, state.budget.maxSearches - state.budget.searchesUsed);
+    const contactSearchReserve = requiresPublicEmail(state.brief)
+      ? Math.min(
+        Math.max(0, state.budget.maxSearches - state.budget.searchesUsed - 1),
+        state.brief.limits.maxCandidateAccounts * CONTACT_SEARCHES_PER_ACCOUNT,
+      )
+      : 0;
+    const searchBudgetRemaining = Math.max(0, state.budget.maxSearches - state.budget.searchesUsed - contactSearchReserve);
     const pageBudgetRemaining = Math.max(0, state.budget.maxPages - state.budget.pagesUsed);
     const resultLimit = Math.min(
       MAX_SEARCH_RESULTS_PER_QUERY,
@@ -383,7 +397,7 @@ function createSearchProviderNode(
       stage: "SEARCH_PROVIDER",
       status: "RUNNING",
       message: `Starting bounded search across ${queries.length} prepared queries.`,
-      detail: `Search budget: ${state.budget.maxSearches}; page budget: ${state.budget.maxPages}.`,
+      detail: `Search budget: ${state.budget.maxSearches}; reserving ${contactSearchReserve} search(es) for public-contact enrichment; page budget: ${state.budget.maxPages}.`,
       counts: { searches: 0, pages: state.budget.pagesUsed },
     });
 
@@ -517,7 +531,13 @@ function createFetchOfficialSourcesNode(
   });
 
   return async (state) => {
-    const pageBudgetRemaining = Math.max(0, state.budget.maxPages - state.budget.pagesUsed);
+    const contactPageReserve = requiresPublicEmail(state.brief)
+      ? Math.min(
+        Math.max(0, state.budget.maxPages - state.budget.pagesUsed - 1),
+        state.brief.limits.maxCandidateAccounts * CONTACT_PAGES_PER_ACCOUNT,
+      )
+      : 0;
+    const pageBudgetRemaining = Math.max(0, state.budget.maxPages - state.budget.pagesUsed - contactPageReserve);
     const fetchedSources: FetchedSourceReference[] = [];
     const evidenceIds: string[] = [];
     const errors: Array<z.infer<typeof GraphErrorSchema>> = [];
@@ -537,7 +557,7 @@ function createFetchOfficialSourcesNode(
       stage: "OFFICIAL_SOURCE_FETCH",
       status: "RUNNING",
       message: `Fetching up to ${Math.min(sourceCandidates.length, pageBudgetRemaining)} first-party sources.`,
-      detail: "Non-first-party results are filtered before safe fetching.",
+      detail: `Non-first-party results are filtered before safe fetching; reserving ${contactPageReserve} page(s) for public-contact enrichment.`,
       counts: { searches: state.budget.searchesUsed, pages: 0, sources: 0 },
     });
 
@@ -662,10 +682,19 @@ function createExtractAccountsNode(
       counts: { searches: state.budget.searchesUsed, pages: state.budget.pagesUsed, sources: state.fetchedSources.length, accounts: 0 },
     });
 
-    if (sources.length > extractionCallLimit) {
+    const accountLimitReached = sources.length > extractionCallLimit
+      && extractionCallLimit >= state.brief.limits.maxCandidateAccounts;
+    const modelCallLimitReached = sources.length > extractionCallLimit
+      && extractionCallLimit < state.brief.limits.maxCandidateAccounts;
+    if (accountLimitReached) {
+      warnings.push({
+        code: "ACCOUNT_EXTRACTION_CANDIDATE_LIMIT_REACHED",
+        message: `Account extraction stopped at the mission candidate-account limit of ${state.brief.limits.maxCandidateAccounts}; the model-call budget remains available for later stages.`,
+      });
+    } else if (modelCallLimitReached) {
       warnings.push({
         code: "ACCOUNT_EXTRACTION_MODEL_BUDGET_REACHED",
-        message: `Account extraction is bounded to ${extractionCallLimit} model calls so signal verification retains budget.`,
+        message: `Account extraction is bounded to ${extractionCallLimit} model calls from the configured mission budget of ${state.budget.maxModelCalls}; remaining calls are reserved for signal verification and contact work.`,
       });
     }
 
@@ -704,6 +733,12 @@ function createExtractAccountsNode(
           counts: { searches: state.budget.searchesUsed, pages: state.budget.pagesUsed, sources: state.fetchedSources.length, accounts: discoveredAccounts.length },
         });
       } catch (error) {
+        logRuntimeError("mission.discovery.account_extraction_failed", {
+          missionRunId: state.missionRunId,
+          sourceUrl: source.finalUrl,
+          sourceContentHash: source.contentHash,
+          error,
+        });
         errors.push({
           code: `ACCOUNT_EXTRACTION_${errorCode(error)}`,
           message: `Account extraction failed for ${source.finalUrl}: ${errorMessage(error)}`,
@@ -961,6 +996,7 @@ function createContactEnrichmentNode(
     const pageBudgetRemaining = Math.max(0, state.budget.maxPages - state.budget.pagesUsed);
     let contactSearchesUsed = 0;
     let contactPagesUsed = 0;
+    let contactModelCallsUsed = 0;
 
     await reportProgress(dependencies, {
       stage: "CONTACT_PLAN",
@@ -990,7 +1026,7 @@ function createContactEnrichmentNode(
         let hostname = "";
         try { hostname = new URL(account.officialDomain ?? account.website ?? "").hostname; } catch { hostname = ""; }
         if (hostname) {
-          const query = `site:${hostname} contact partnerships commercial ${account.possibleBuyerRoles[0] ?? state.brief.buyerRoles[0]}`.slice(0, 500);
+          const query = `site:${hostname} contact partnerships commercial ${effectiveBuyerRoles(state.brief)[0]}`.slice(0, 500);
           contactSearchesUsed += 1;
           try {
             const rawResults = await searchProvider.search(SearchProviderRequestSchema.parse({ query, countryOrLocale: state.brief.geographies.join(", "), freshnessWindowDays: state.brief.freshnessWindowDays, resultLimit: 10, missionRunId: state.missionRunId }));
@@ -1037,7 +1073,39 @@ function createContactEnrichmentNode(
         }
       }
 
-      const routes = deriveContactRoutes(account, [...state.fetchedSources, ...contactSources], state.brief.buyerRoles);
+      const accountContactSources = [...state.fetchedSources, ...contactSources].filter((source) => sameOfficialSite(account, source.finalUrl));
+      let routeSources = accountContactSources;
+      let routes = deriveContactRoutes(account, routeSources, effectiveBuyerRoles(state.brief));
+      const hasDeterministicPublicEmail = routes.some((route) => route.routeType === "PUBLIC_EMAIL" && route.isUsableForSales);
+      const contactExtractor = dependencies.extractContacts ?? extractPublicContacts;
+      if (!hasDeterministicPublicEmail && accountContactSources.length > 0 && state.budget.modelCallsUsed + contactModelCallsUsed < state.budget.maxModelCalls) {
+        const extractionSource = accountContactSources.at(-1)!;
+        contactModelCallsUsed += 1;
+        await reportProgress(dependencies, {
+          stage: "CONTACT_EXTRACTION",
+          status: "RUNNING",
+          message: `Checking ${account.companyName}'s official contact text with the bounded contact parser.`,
+          detail: extractionSource.finalUrl,
+          counts: { searches: state.budget.searchesUsed + contactSearchesUsed, pages: state.budget.pagesUsed + contactPagesUsed, accounts: accountIndex + 1, contacts: contactSources.length },
+        });
+        try {
+          const extracted = await contactExtractor({ missionRunId: state.missionRunId, accountKey: account.accountKey, companyName: account.companyName, source: extractionSource });
+          const accepted = extracted.contacts.filter((contact) => {
+            const email = contact.email.toLowerCase();
+            const excerpt = extractionSource.readableExcerpt.toLowerCase();
+            return excerpt.includes(email) && contact.evidenceExcerpt.toLowerCase().includes(email);
+          });
+          if (accepted.length > 0) {
+            routeSources = accountContactSources.map((source) => source.contentHash === extractionSource.contentHash
+              ? FetchedSourceReferenceSchema.parse({ ...source, publicEmailHints: [...(source.publicEmailHints ?? []), ...accepted.map((contact) => ({ email: contact.email, sourceKind: "STRUCTURED_EXTRACTION" as const, surroundingText: contact.evidenceExcerpt }))] })
+              : source);
+            routes = deriveContactRoutes(account, routeSources, effectiveBuyerRoles(state.brief));
+          }
+        } catch (error) {
+          logRuntimeError("mission.discovery.contact_extraction_failed", { missionRunId: state.missionRunId, accountKey: account.accountKey, sourceUrl: extractionSource.finalUrl, sourceContentHash: extractionSource.contentHash, error });
+          errors.push({ code: `CONTACT_EXTRACTION_${errorCode(error)}`, message: `Public contact extraction failed for ${account.companyName}: ${errorMessage(error)}`, retryable: true });
+        }
+      }
       const hasPublicEmail = routes.some((route) => route.routeType === "PUBLIC_EMAIL" && route.isUsableForSales);
       const hasUsableRoute = routes.some((route) => route.isUsableForSales);
       const emailRequired = requiresPublicEmail(state.brief);
@@ -1062,7 +1130,7 @@ function createContactEnrichmentNode(
       discoveredAccounts: accounts,
       accountIds: state.accountIds,
       evidenceIds: contactSources.map((source) => `source:${source.contentHash}`),
-      budget: { ...state.budget, searchesUsed: state.budget.searchesUsed + contactSearchesUsed, pagesUsed: state.budget.pagesUsed + contactPagesUsed, contactSearchesUsed: (state.budget.contactSearchesUsed ?? 0) + contactSearchesUsed, contactPagesUsed: (state.budget.contactPagesUsed ?? 0) + contactPagesUsed },
+      budget: { ...state.budget, searchesUsed: state.budget.searchesUsed + contactSearchesUsed, pagesUsed: state.budget.pagesUsed + contactPagesUsed, modelCallsUsed: state.budget.modelCallsUsed + contactModelCallsUsed, contactSearchesUsed: (state.budget.contactSearchesUsed ?? 0) + contactSearchesUsed, contactPagesUsed: (state.budget.contactPagesUsed ?? 0) + contactPagesUsed, contactModelCallsUsed: (state.budget.contactModelCallsUsed ?? 0) + contactModelCallsUsed },
       warnings,
       errors,
       status: "RUNNING" as const,

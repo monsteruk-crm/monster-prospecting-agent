@@ -13,7 +13,7 @@ The product now needs a canonical account taxonomy that supports grouped multi-s
 
 - Introduce one canonical taxonomy registry in `lib/sales/prospect-taxonomy.ts` for prospect account categories, buyer models, category groups, featured categories, labels, descriptions, search hints and structured classification helpers.
 - Keep `SalesMissionBrief.accountCategories` as the bounded multi-select mission target list, with a 1-6 selection limit.
-- Store discovered accounts as a structured `ProspectAccountClassification` object with exactly one primary category, zero or more secondary categories, a controlled buyer model, and optional subtypes.
+- Store discovered accounts as a structured `ProspectAccountClassification` object with exactly one primary category, zero or more secondary categories, a controlled buyer model, and a normalized `subtypes` array (empty when unsupported). Keeping every classification property required in the generated strict JSON schema is necessary for OpenAI-compatible extraction providers.
 - Persist the structured classification in the existing Prisma JSON `categories` column for now, while normalising legacy array rows on read so older runs remain usable without a forced database reset.
 - Use the canonical registry in the mission form, preparation graph, extraction prompt, scoring, export mapper and persisted dossier rendering so the product shows the same taxonomy everywhere.
 
@@ -26,7 +26,7 @@ The product now needs a canonical account taxonomy that supports grouped multi-s
 
 ## Consequences
 
-The mission builder and run dossier now show grouped, searchable account categories and structured account classification. Search strategy generation can use labels and hints instead of raw enum slugs. Legacy persisted rows remain readable through normalisation, but the storage column name remains historical until a future migration.
+The mission builder and run dossier now show grouped, searchable account categories and structured account classification. Search strategy generation can use labels and hints instead of raw enum slugs. Legacy persisted rows remain readable through normalisation, but the storage column name remains historical until a future migration. Video hosts and general reference/download pages are also filtered before official-source fetching so they do not consume the bounded source budget.
 
 ## Affected paths
 

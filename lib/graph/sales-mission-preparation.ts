@@ -23,7 +23,7 @@ import {
   type SalesMissionBrief,
   type SalesMissionBriefInput,
 } from "@/lib/sales/mission-schema";
-import { requiresPublicEmail } from "@/lib/sales/contact-route-engine";
+import { effectiveBuyerRoles, requiresPublicEmail } from "@/lib/sales/contact-route-engine";
 import { getProspectCategoryDefinition } from "@/lib/sales/prospect-taxonomy";
 
 export const SALES_MISSION_GRAPH_VERSION = "act-1-preparation-v1";
@@ -67,7 +67,7 @@ const buildTargetProfile: GraphNode<SalesMissionGraphStateType> = (state) => {
     productFocus: brief.productFocus,
     requiredSignals: brief.requiredSignals,
     preferredSignals: brief.preferredSignals,
-    targetBuyerRoles: brief.buyerRoles,
+    targetBuyerRoles: effectiveBuyerRoles(brief),
     commercialScaleIndicators: [
       "large or repeat ticketed audiences",
       "touring, multi-city or multi-venue operations",
@@ -88,7 +88,7 @@ const buildSearchStrategy: GraphNode<SalesMissionGraphStateType> = (state) => {
     .flatMap((category) => getProspectCategoryDefinition(category).searchHints.slice(0, 2))
     .slice(0, 6)
     .join(" OR ");
-  const signals = [...brief.requiredSignals, ...brief.preferredSignals].join(" OR ") || "new programme expansion partnership";
+  const signalTerms = [...brief.requiredSignals, ...brief.preferredSignals].filter(Boolean);
   const remainingQueries = { value: brief.limits.maxSearches };
 
   const candidates = [
@@ -104,13 +104,13 @@ const buildSearchStrategy: GraphNode<SalesMissionGraphStateType> = (state) => {
       kind: "EVENT_PORTFOLIO_DISCOVERY" as const,
       queries: [`${categoryLabels || categoryHints} event programme ${geography}`.trim()],
     },
-    {
+    ...(signalTerms.length > 0 ? [{
       kind: "SIGNAL_DISCOVERY" as const,
-      queries: [`${categoryHints || categoryLabels} ${signals} ${geography}`.trim()],
-    },
+      queries: [`${categoryHints || categoryLabels} ${signalTerms.join(" OR ")} ${geography}`.trim()],
+    }] : []),
     {
       kind: "BUYER_ROLE_DISCOVERY" as const,
-      queries: brief.buyerRoles.slice(0, 2).map((role) => `${role} ${categoryLabels || categoryHints} ${geography}`.trim()),
+      queries: effectiveBuyerRoles(brief).slice(0, 2).map((role) => `${role} ${categoryLabels || categoryHints} ${geography}`.trim()),
     },
     {
       kind: "CONTACT_ROUTE_DISCOVERY" as const,

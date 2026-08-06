@@ -106,6 +106,33 @@ describe("safeFetch", () => {
     ]));
   });
 
+  test("does not fail the source when visible email text is concatenated with nearby copy", async () => {
+    const result = await safeFetch(
+      { url: "https://festivallstaff.co.uk/contact" },
+      {
+        fetchImplementation: vi.fn(async () => htmlResponse("<html><body>Contact work@festivallstaff.co.ukfestivall for bookings.</body></html>")),
+        resolveAddresses: publicAddresses,
+      },
+    );
+
+    expect(result.publicEmailHints).toEqual(expect.arrayContaining([
+      expect.objectContaining({ email: "work@festivallstaff.co.uk" }),
+    ]));
+  });
+
+  test("drops an invalid contact hint without failing the source result", async () => {
+    const result = await safeFetch(
+      { url: "https://government.example.org/contact" },
+      {
+        fetchImplementation: vi.fn(async () => htmlResponse("<html><body>Contact bad@@government.example and the public desk.</body></html>")),
+        resolveAddresses: publicAddresses,
+      },
+    );
+
+    expect(result.publicEmailHints).toEqual([]);
+    expect(result.readableText).toContain("public desk");
+  });
+
   test("revalidates every redirect and blocks a private destination", async () => {
     const fetchImplementation = vi.fn(async () =>
       new Response(null, {

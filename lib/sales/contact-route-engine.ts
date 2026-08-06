@@ -12,11 +12,23 @@ const UNSUITABLE_MAILBOXES = new Set([
 ]);
 const HIGH_VALUE_MAILBOX_TERMS = ["partnership", "commercial", "businessdevelopment", "business-development", "events", "bookings", "licensing", "sponsorship", "corporate", "sales"];
 const MEDIUM_VALUE_MAILBOX_TERMS = ["enquiries", "inquiries", "hello", "info", "contact"];
+const EMAIL_ONLY_ROLE_PATTERN = /\b(?:any\s+)?e-?mail\s+(?:available|required|only)\b|\b(?:email|e-?mail)\s+available\b/i;
+
+export function isEmailOnlyRolePhrase(value: string): boolean {
+  return EMAIL_ONLY_ROLE_PATTERN.test(value.trim());
+}
+
+export function effectiveBuyerRoles(brief: Pick<SalesMissionBrief, "buyerRoles">): string[] {
+  const roles = brief.buyerRoles.filter((role) => !isEmailOnlyRolePhrase(role));
+  return roles.length > 0 ? roles : ["Commercial Director"];
+}
 
 export function requiresPublicEmail(
-  brief: Pick<SalesMissionBrief, "contactRequirement" | "instructions">,
+  brief: Pick<SalesMissionBrief, "contactRequirement" | "instructions"> & { buyerRoles?: readonly string[] },
 ): boolean {
-  return brief.contactRequirement === "PUBLIC_EMAIL" || EMAIL_ONLY_INSTRUCTION_PATTERN.test(brief.instructions);
+  return brief.contactRequirement === "PUBLIC_EMAIL"
+    || EMAIL_ONLY_INSTRUCTION_PATTERN.test(brief.instructions)
+    || (brief.buyerRoles ?? []).some(isEmailOnlyRolePhrase);
 }
 
 function normaliseEmail(raw: string): string | undefined {
@@ -39,6 +51,25 @@ export function extractPublicEmails(sourceText: string): string[] {
 
 export function extractPublicEmail(sourceExcerpt: string): string | undefined {
   return rankPublicEmails(extractPublicEmails(sourceExcerpt))[0];
+}
+
+export function isLikelyPublicPhone(value: string): boolean {
+  const phone = value.trim();
+  const groups = phone.split(/[^\d]+/).filter(Boolean);
+  // Do not rely on word boundaries: scraped fragments can concatenate a year
+  // immediately before an ISO date (for example `20252023-09-01`).
+  if (!phone || /(?:19|20)\d{2}[-/.]\d{1,2}[-/.]\d{1,2}/.test(phone) || /\b\d{4}\s*[-/]\s*\d{4}\b/.test(phone)) return false;
+  if ((phone.match(/\(/g)?.length ?? 0) !== (phone.match(/\)/g)?.length ?? 0)) return false;
+  const digits = phone.replace(/\D/g, "").length;
+  return digits >= 7 && digits <= 15 && /[+()\s-]/.test(phone) && !(groups.length > 1 && groups.every((group) => group.length <= 2) && !phone.startsWith("+"));
+}
+
+export function sanitizeContactRoutes(rawRoutes: unknown): ContactRoute[] {
+  return ContactRouteSchema.array().parse(rawRoutes)
+    .filter((route) => !route.phone || isLikelyPublicPhone(route.phone))
+    .map((route) => isEmailOnlyRolePhrase(route.targetRole)
+      ? { ...route, targetRole: "Commercial Director", ...(route.intendedBuyerRole && isEmailOnlyRolePhrase(route.intendedBuyerRole) ? { intendedBuyerRole: "Commercial Director" } : {}) }
+      : route);
 }
 
 export function rankPublicEmails(emails: readonly string[]): string[] {
@@ -108,7 +139,9 @@ export function deriveContactRoutes(
   fallbackRoles: string[] = [],
   options: { requirePublicEmail?: boolean } = {},
 ): ContactRoute[] {
-  const targetRole = account.possibleBuyerRoles[0] ?? fallbackRoles[0] ?? "Commercial contact";
+  const targetRole = account.possibleBuyerRoles.find((role) => !isEmailOnlyRolePhrase(role))
+    ?? fallbackRoles.find((role) => !isEmailOnlyRolePhrase(role))
+    ?? "Commercial Director";
   const routes: ContactRoute[] = [];
   const seen = new Set<string>();
   const relevantSources = sources.filter((source) => sourceIsRelevant(account, source));

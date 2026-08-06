@@ -28,6 +28,11 @@ export type DiscoveryRunHooks = {
   onSearchProgress?: (event: MissionSearchProgressEvent) => Promise<void> | void;
 };
 
+export type DiscoveryRunIds = {
+  missionId?: string;
+  missionRunId?: string;
+};
+
 export type DiscoveryRunResult = {
   prepared: PreparedSalesMissionForDiscovery;
   discovered: Awaited<ReturnType<typeof discoverSalesMission>>;
@@ -45,10 +50,11 @@ function progressRecord(sequence: number, event: MissionProgressEvent): MissionP
 export async function executeDiscoveryRun(
   rawBrief: SalesMissionBrief,
   hooks: DiscoveryRunHooks = {},
+  ids: DiscoveryRunIds = {},
 ): Promise<DiscoveryRunResult> {
   const brief = SalesMissionBriefSchema.parse(rawBrief);
   const effectiveSettings = await getEffectiveScoutSettings();
-  const preparedState = await prepareSalesMission(brief);
+  const preparedState = await prepareSalesMission(brief, ids);
   if (!preparedState.targetProfile || !preparedState.searchStrategy) {
     throw new Error("MISSION_PREPARATION_INCOMPLETE");
   }

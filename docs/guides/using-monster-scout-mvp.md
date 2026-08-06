@@ -266,7 +266,7 @@ The dossier begins with a **Mission brief** panel showing the exact owner, geogr
 
 ## Saved run IDs and deeper search
 
-The **Runs** page keeps mission history backed by PostgreSQL. Each row shows the mission name, durable `missionRunId`, status and discovery stage; use **Open** to retrieve the dossier again. The dossier’s live/saved output includes the executed queries and their result counts. The run ID is available inside the dossier/audit surface rather than as a primary dashboard input.
+The **Runs** page keeps mission history backed by PostgreSQL. Each row shows the mission name, durable `missionRunId`, status and discovery stage; use **Open** to retrieve the dossier again. Select one or more rows and choose **Delete selected** to immediately remove those runs and their run-owned data; no confirmation is shown. The dossier’s live/saved output includes the executed queries and their result counts. The run ID is available inside the dossier/audit surface rather than as a primary dashboard input.
 
 Use **Search deeper** on a completed dossier when the first pass did not reach enough useful official sources. This performs another bounded pass using the same mission strategy, requests a deeper search-result window, skips URLs already saved for that run, and persists the new results under the same `missionRunId`. It does not create an unbounded crawler or a separate unowned search.
 
@@ -285,9 +285,11 @@ A mission can return fewer accounts because:
 - evidence was insufficient;
 - the search budget was exhausted;
 - duplicate or irrelevant results were discarded;
-- the model-call budget reserved capacity for verification.
+- the configured model-call budget reserved capacity for verification. This is separate from the candidate-account limit: for example, a 40-call budget with a five-account target can still stop account extraction at five accounts without reporting model-budget exhaustion.
 
 A smaller evidence-backed result is preferable to five fabricated or weak records.
+
+For `PUBLIC_EMAIL` missions, accounts without a verified usable public email remain in persisted audit/scoring data but are excluded from the dossier result list and approved export.
 
 ---
 
@@ -654,7 +656,7 @@ Check:
 - search results and source errors;
 - HTTP 403 failures;
 - evidence support;
-- model-call and page budgets;
+- the saved model-call and page budgets (the dossier brief records the effective values used for that run);
 - whether candidate pages were official and readable.
 
 Do not respond by weakening evidence rules or bypassing blocked websites.

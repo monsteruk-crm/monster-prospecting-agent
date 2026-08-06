@@ -4,7 +4,7 @@ import { DatabaseConfigurationError } from "@/lib/db/client";
 import { draftFirstMove } from "@/lib/chains/first-move";
 import { getPrismaClient } from "@/lib/db/client";
 import { persistFirstMoveDraft } from "@/lib/persistence/review-persistence";
-import { ContactRouteSchema } from "@/lib/sales/contact-schema";
+import { sanitizeContactRoutes } from "@/lib/sales/contact-route-engine";
 
 export const runtime = "nodejs";
 const IdSchema = z.string().trim().min(1).max(300);
@@ -18,7 +18,7 @@ export async function POST(_request: Request, context: { params: Promise<{ id: s
     const account = await db.prospectAccount.findUnique({ where: { id: parsedId.data }, include: { run: { include: { mission: true, review: true } }, evidence: true, buyingSignals: true } });
     if (!account) return Response.json({ error: { code: "ACCOUNT_NOT_FOUND", message: "The prospect account was not found." } }, { status: 404 });
     if (account.run.review?.status !== "APPROVED") return Response.json({ error: { code: "APPROVAL_REQUIRED", message: "A human approval is required before drafting a first move." } }, { status: 409 });
-    const contactRoutes = z.array(ContactRouteSchema).parse(account.contactRoutes);
+    const contactRoutes = sanitizeContactRoutes(account.contactRoutes);
     const draft = await draftFirstMove({
       missionRunId: account.missionRunId,
       accountId: account.id,

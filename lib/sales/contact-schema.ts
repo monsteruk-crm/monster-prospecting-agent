@@ -59,6 +59,15 @@ export const PublicContactCandidateSchema = ContactRouteSchema.extend({
   freshness: ContactFreshnessSchema,
 });
 
+export const PublicContactExtractionSchema = z.object({
+  contacts: z.array(z.object({
+    email: z.string().email(),
+    evidenceExcerpt: z.string().trim().min(1).max(500),
+  })).max(10),
+});
+
+export type PublicContactExtraction = z.infer<typeof PublicContactExtractionSchema>;
+
 export const FirstMoveBriefSchema = z.object({
   subject: z.string().trim().min(1).max(180),
   opening: z.string().trim().min(1).max(1000),

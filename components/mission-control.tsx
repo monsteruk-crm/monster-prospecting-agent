@@ -183,6 +183,7 @@ export function MissionControl({ mode = "legacy", initialRunId = "" }: { mode?: 
     const [isLaunching, setIsLaunching] = useState(false);
     const [hasAttemptedLaunch, setHasAttemptedLaunch] = useState(false);
     const [isContinuing, setIsContinuing] = useState(false);
+    const [isReexecuting, setIsReexecuting] = useState(false);
     const [isContactEnriching, setIsContactEnriching] = useState(false);
     const [researchGap, setResearchGap] = useState("");
     const [isRecordingGap, setIsRecordingGap] = useState(false);
@@ -402,6 +403,28 @@ export function MissionControl({ mode = "legacy", initialRunId = "" }: { mode?: 
         }
     }
 
+    async function reexecuteRun() {
+        if (!dossier) return;
+        setIsReexecuting(true);
+        setDossierError("");
+        setLaunchStatus("Starting a fresh execution from the saved mission brief…");
+        try {
+            const response = await fetch(`/api/runs/${encodeURIComponent(dossier.id)}/rerun`, {
+                method: "POST",
+                headers: { "content-type": "application/json" },
+            });
+            const payload = await response.json() as LaunchResponse;
+            if (!response.ok || !payload.missionRunId) throw new Error(payload.error?.message ?? "The mission could not be re-executed.");
+            await loadRunHistory();
+            window.location.href = `/runs/${encodeURIComponent(payload.missionRunId)}`;
+        } catch (error) {
+            setDossierError(error instanceof Error ? error.message : "The mission could not be re-executed.");
+            setLaunchStatus("");
+        } finally {
+            setIsReexecuting(false);
+        }
+    }
+
     async function enrichContacts(accountId: string) {
         if (!dossier) return;
         setIsContactEnriching(true);
@@ -515,7 +538,7 @@ export function MissionControl({ mode = "legacy", initialRunId = "" }: { mode?: 
     if (mode === "run") {
         const latestEvent = liveOutput.at(-1);
         const progress = dossier ? runProgressPercent(dossier.discoveryStage, dossier.status) : 0;
-        return <section className="mx-auto max-w-6xl"><header className="page-heading"><div><p className="eyebrow">Mission</p><h1>{dossier?.mission.name ?? "Loading mission…"}</h1><p>{dossier ? `${dossier.accounts.length} accounts · ${dossier.status.toLowerCase()}` : "Restoring the saved research run."}</p></div><Link href="/runs" className="secondary-button">All runs</Link></header>{dossierError ? <p className="alert alert-error mt-6" role="alert">{dossierError}</p> : null}{isLoadingDossier ? <div className="major-surface mt-8"><p className="text-white/55">Loading evidence and activity…</p></div> : null}{dossier ? <><div className="major-surface mt-8"><div className="flex flex-wrap items-center justify-between gap-3"><div><p className="eyebrow text-[#36d399]">{dossier.status === "RUNNING" ? "Research in progress" : "Research complete"}</p><p className="mt-2 text-sm text-white/70">{latestEvent?.message ?? "Restoring saved mission activity…"}</p></div><span className="font-mono text-sm text-white/55">{liveOutput.length} events</span></div><div className="mt-5 h-2 overflow-hidden rounded-full bg-white/10"><div className="h-full rounded-full bg-[#36d399] transition-[width] duration-500" style={{ width: `${progress}%` }} /></div><div className="mt-2 flex justify-between text-xs text-white/40"><span>{dossier.discoveryStage}</span><span>{progress}%</span></div></div><div className="mt-8 grid gap-5 lg:grid-cols-[180px_1fr]"><ol className="major-surface space-y-4 text-sm">{["Brief", "Market search", "Accounts", "Signals", "Contacts", "Review"].map((stage, index) => <li key={stage} className={index < Math.max(1, Math.round(progress / 100 * 6)) ? "text-[#36d399]" : "text-white/55"}><span className="mr-2 font-mono text-xs">0{index + 1}</span>{stage}</li>)}</ol><div><LiveOutputPanel output={liveOutput} running={dossier.status === "RUNNING"} /></div></div><DossierView dossier={dossier} isDeciding={isDeciding} isDrafting={isDrafting} isExporting={isExporting} isContinuing={isContinuing} isContactEnriching={isContactEnriching} isRecordingGap={isRecordingGap} researchGap={researchGap} onResearchGapChange={setResearchGap} onResearchGap={recordResearchGap} onContinue={continueSearch} onContactEnrich={enrichContacts} onExport={exportApprovedLeads} onDecision={decideReview} onDraft={draftFirstMove} /></> : null}</section>;
+        return <section className="mx-auto max-w-6xl"><header className="page-heading"><div><p className="eyebrow">Mission</p><h1>{dossier?.mission.name ?? "Loading mission…"}</h1><p>{dossier ? `${dossier.accounts.length} accounts · ${dossier.status.toLowerCase()}` : "Restoring the saved research run."}</p></div><Link href="/runs" className="secondary-button">All runs</Link></header>{dossierError ? <p className="alert alert-error mt-6" role="alert">{dossierError}</p> : null}{isLoadingDossier ? <div className="major-surface mt-8"><p className="text-white/55">Loading evidence and activity…</p></div> : null}{dossier ? <><div className="major-surface mt-8"><div className="flex flex-wrap items-center justify-between gap-3"><div><p className="eyebrow text-[#36d399]">{dossier.status === "RUNNING" ? "Research in progress" : "Research complete"}</p><p className="mt-2 text-sm text-white/70">{latestEvent?.message ?? "Restoring saved mission activity…"}</p></div><span className="font-mono text-sm text-white/55">{liveOutput.length} events</span></div><div className="mt-5 h-2 overflow-hidden rounded-full bg-white/10"><div className="h-full rounded-full bg-[#36d399] transition-[width] duration-500" style={{ width: `${progress}%` }} /></div><div className="mt-2 flex justify-between text-xs text-white/40"><span>{dossier.discoveryStage}</span><span>{progress}%</span></div></div><div className="mt-8 grid gap-5 lg:grid-cols-[180px_1fr]"><ol className="major-surface space-y-4 text-sm">{["Brief", "Market search", "Accounts", "Signals", "Contacts", "Review"].map((stage, index) => <li key={stage} className={index < Math.max(1, Math.round(progress / 100 * 6)) ? "text-[#36d399]" : "text-white/55"}><span className="mr-2 font-mono text-xs">0{index + 1}</span>{stage}</li>)}</ol><div><LiveOutputPanel output={liveOutput} running={dossier.status === "RUNNING"} /></div></div><DossierView dossier={dossier} isDeciding={isDeciding} isDrafting={isDrafting} isExporting={isExporting} isContinuing={isContinuing} isReexecuting={isReexecuting} isContactEnriching={isContactEnriching} isRecordingGap={isRecordingGap} researchGap={researchGap} onResearchGapChange={setResearchGap} onResearchGap={recordResearchGap} onContinue={continueSearch} onReexecute={reexecuteRun} onContactEnrich={enrichContacts} onExport={exportApprovedLeads} onDecision={decideReview} onDraft={draftFirstMove} /></> : null}</section>;
     }
 
     return <main
@@ -670,9 +693,10 @@ export function MissionControl({ mode = "legacy", initialRunId = "" }: { mode?: 
                         }}/> : null}
                     {dossier ? <DossierView dossier={dossier} isDeciding={isDeciding} isDrafting={isDrafting}
                                             isExporting={isExporting} isContinuing={isContinuing}
+                                            isReexecuting={isReexecuting}
                                             isContactEnriching={isContactEnriching} isRecordingGap={isRecordingGap}
                                             researchGap={researchGap} onResearchGapChange={setResearchGap}
-                                            onResearchGap={recordResearchGap} onContinue={continueSearch}
+                                            onResearchGap={recordResearchGap} onContinue={continueSearch} onReexecute={reexecuteRun}
                                             onContactEnrich={enrichContacts} onExport={exportApprovedLeads}
                                             onDecision={decideReview} onDraft={draftFirstMove}/> : null}</div>
                 <aside className="rounded-3xl border border-white/10 bg-[#0f141b]/90 p-6 sm:p-8"><p
@@ -742,12 +766,14 @@ function DossierView({
                          isDrafting,
                          isExporting,
                          isContinuing,
+                         isReexecuting,
                          isContactEnriching,
                          isRecordingGap,
                          researchGap,
                          onResearchGapChange,
                          onResearchGap,
                          onContinue,
+                         onReexecute,
                          onContactEnrich,
                          onExport,
                          onDecision,
@@ -758,12 +784,14 @@ function DossierView({
     isDrafting: boolean;
     isExporting: boolean;
     isContinuing: boolean;
+    isReexecuting: boolean;
     isContactEnriching: boolean;
     isRecordingGap: boolean;
     researchGap: string;
     onResearchGapChange: (value: string) => void;
     onResearchGap: () => void;
     onContinue: () => void;
+    onReexecute: () => void;
     onContactEnrich: (accountId: string) => void;
     onExport: () => void;
     onDecision: (action: "APPROVE" | "REJECT" | "EDIT") => void;
@@ -781,7 +809,8 @@ function DossierView({
                 <div className="flex flex-wrap items-center justify-end gap-3"><span
                     className="rounded-full border border-[#f5c542]/30 px-3 py-1 text-xs font-bold uppercase tracking-[0.14em] text-[#f5c542]">Review: {dossier.review?.status ?? "UNKNOWN"}</span>{dossier.status !== "RUNNING" ?
                     <button type="button" disabled={isContinuing} onClick={onContinue}
-                            className="rounded-full border border-[#f5c542]/40 px-4 py-2 text-xs font-bold text-[#f5c542] disabled:opacity-50">{isContinuing ? "Searching deeper…" : "Search deeper"}</button> : null}{approved ?
+                    className="rounded-full border border-[#f5c542]/40 px-4 py-2 text-xs font-bold text-[#f5c542] disabled:opacity-50">{isContinuing ? "Searching deeper…" : "Search deeper"}</button> : null}{dossier.status !== "RUNNING" ? <button type="button" disabled={isReexecuting} onClick={onReexecute}
+                    className="rounded-full border border-white/25 px-4 py-2 text-xs font-bold text-white/75 disabled:opacity-50">{isReexecuting ? "Re-executing…" : "Re-execute run"}</button> : null}{approved ?
                     <button type="button" disabled={isExporting} onClick={onExport}
                             className="rounded-full bg-[#36d399] px-4 py-2 text-xs font-bold text-[#07130f] disabled:opacity-50">{isExporting ? "Exporting…" : "Download approved CSV"}</button> : null}
                 </div>

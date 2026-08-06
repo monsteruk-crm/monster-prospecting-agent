@@ -24,7 +24,7 @@ import {
   type VerifiedBuyingSignal,
 } from "@/lib/sales/mission-schema";
 import { scoreProspectAccount } from "@/lib/sales/score-engine";
-import { deriveContactRoutes } from "@/lib/sales/contact-route-engine";
+import { deriveContactRoutes, effectiveBuyerRoles } from "@/lib/sales/contact-route-engine";
 import { getDomain } from "tldts";
 import {
   PersistedReviewSchema,
@@ -306,6 +306,23 @@ export async function listMissionRuns(
   });
 }
 
+export async function deleteMissionRuns(
+  ids: readonly string[],
+  client: PersistenceClient = getPrismaClient(),
+) {
+  const uniqueIds = [...new Set(ids)].filter((id) => id.trim().length > 0).slice(0, 50);
+  if (uniqueIds.length === 0) return { deletedIds: [], missingIds: [] };
+  return client.$transaction(async (transaction) => {
+    const existing = await transaction.salesMissionRun.findMany({ where: { id: { in: uniqueIds } }, select: { id: true } });
+    const existingIds = existing.map((run) => run.id);
+    await transaction.salesMissionRun.deleteMany({ where: { id: { in: existingIds } } });
+    return {
+      deletedIds: existingIds,
+      missingIds: uniqueIds.filter((id) => !existingIds.includes(id)),
+    };
+  });
+}
+
 export async function persistDiscoveryResult(
   rawInput: DiscoveryPersistenceInput,
   client: PersistenceClient = getPrismaClient(),
@@ -325,7 +342,7 @@ export async function persistDiscoveryResult(
       const accountSource = fetchedSources.find((source) =>
         account.discoveryEvidenceIds.includes(`source:${source.contentHash}`),
       );
-      const contactRoutes = deriveContactRoutes(account, fetchedSources, prepared.brief.buyerRoles);
+      const contactRoutes = deriveContactRoutes(account, fetchedSources, effectiveBuyerRoles(prepared.brief));
       const accountDomain = registrableDomain(account.officialDomain ?? account.website);
       const mergedEvidenceIds = [...new Set([
         ...account.discoveryEvidenceIds,

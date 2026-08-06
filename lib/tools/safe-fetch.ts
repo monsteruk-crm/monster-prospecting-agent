@@ -42,7 +42,7 @@ export const PublicPageLinkSchema = z.object({
 
 export const PublicEmailHintSchema = z.object({
   email: z.string().email(),
-  sourceKind: z.enum(["VISIBLE_TEXT", "MAILTO", "JSON_LD"]),
+  sourceKind: z.enum(["VISIBLE_TEXT", "MAILTO", "JSON_LD", "STRUCTURED_EXTRACTION"]),
   surroundingText: z.string().max(MAX_HINT_TEXT_LENGTH).optional(),
 });
 
@@ -129,12 +129,36 @@ function boundedText(value: string | undefined): string {
 
 function normaliseEmail(value: string): string | undefined {
   const email = value.trim().toLowerCase().replace(/[),.;:]+$/, "");
-  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) ? email : undefined;
+  const atIndex = email.lastIndexOf("@");
+  if (atIndex <= 0) return undefined;
+  const local = email.slice(0, atIndex);
+  const domain = email.slice(atIndex + 1);
+  const recognisedSuffixes = [
+    ".co.uk", ".org.uk", ".ac.uk", ".com.au", ".co.nz", ".co.za", ".com", ".org", ".net", ".io", ".ai", ".uk", ".de", ".fr", ".es", ".it", ".nl", ".be", ".ie", ".eu",
+  ];
+  const suffix = recognisedSuffixes
+    .filter((candidate) => domain.includes(candidate))
+    .sort((left, right) => right.length - left.length)[0];
+  const suffixEnd = suffix ? domain.indexOf(suffix) + suffix.length : domain.length;
+  const candidate = `${local}@${domain.slice(0, suffixEnd)}`;
+  return z.string().email().safeParse(candidate).success ? candidate : undefined;
 }
 
 function normalisePhone(value: string): string | undefined {
   const phone = value.replace(/^tel:/i, "").split(/[?#]/, 1)[0]?.trim();
-  return phone && /\d/.test(phone) && phone.replace(/\D/g, "").length >= 7 ? phone.slice(0, 80) : undefined;
+  const groups = phone?.split(/[^\d]+/).filter(Boolean) ?? [];
+  if (!phone || /(?:19|20)\d{2}[-/.]\d{1,2}[-/.]\d{1,2}/.test(phone) || /\b\d{4}\s*[-/]\s*\d{4}\b/.test(phone)) return undefined;
+  if ((phone.match(/\(/g)?.length ?? 0) !== (phone.match(/\)/g)?.length ?? 0)) return undefined;
+  const digits = phone.replace(/\D/g, "").length;
+  if (groups.length > 1 && groups.every((group) => group.length <= 2) && !phone.startsWith("+")) return undefined;
+  return digits >= 7 && digits <= 15 && /[+()\s-]/.test(phone) ? phone.slice(0, 80) : undefined;
+}
+
+function validEmailHints(hints: Array<z.infer<typeof PublicEmailHintSchema>>) {
+  return hints.flatMap((hint) => {
+    const parsed = PublicEmailHintSchema.safeParse(hint);
+    return parsed.success ? [parsed.data] : [];
+  });
 }
 
 function sameRegistrableDomain(left: URL, right: URL): boolean {
@@ -241,7 +265,7 @@ function readableHtml(html: string, pageUrl: URL): {
   if (canonicalRaw) {
     try { const url = new URL(canonicalRaw, pageUrl); if (url.protocol === "http:" || url.protocol === "https:") canonicalUrl = url.toString(); } catch { /* ignore invalid page metadata */ }
   }
-  return { title, readableText, canonicalUrl, links, publicEmailHints, publicPhoneHints };
+  return { title, readableText, canonicalUrl, links, publicEmailHints: validEmailHints(publicEmailHints), publicPhoneHints };
 }
 
 function extractReadableText(mimeType: string, bytes: Uint8Array, pageUrl: URL) {
@@ -404,7 +428,7 @@ export async function safeFetch(
         redirectCount,
         canonicalUrl,
         links,
-        publicEmailHints,
+        publicEmailHints: validEmailHints(publicEmailHints),
         publicPhoneHints,
       });
     } catch (error) {

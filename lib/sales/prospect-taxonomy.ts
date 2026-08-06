@@ -420,7 +420,10 @@ export const ProspectCategoryGroupSchema = z.enum(PROSPECT_CATEGORY_GROUPS);
 export const ProspectAccountClassificationSchema = z.object({
   primaryCategory: ProspectAccountCategorySchema,
   secondaryCategories: z.array(ProspectAccountCategorySchema).max(6).default(() => []),
-  subtypes: z.array(z.string().trim().min(1).max(120)).max(8).optional(),
+  // Keep this required in the generated JSON schema. Some OpenAI-compatible
+  // providers reject strict object schemas when a property is optional.
+  // An empty array carries the same domain meaning as "no known subtypes".
+  subtypes: z.array(z.string().trim().min(1).max(120)).max(8).default(() => []),
   buyerModel: ProspectBuyerModelSchema,
 }).superRefine((value, ctx) => {
   const secondary = new Set(value.secondaryCategories);
@@ -438,7 +441,7 @@ export const ProspectAccountClassificationSchema = z.object({
       message: "Secondary categories must be unique.",
     });
   }
-  if (value.subtypes && new Set(value.subtypes).size !== value.subtypes.length) {
+  if (new Set(value.subtypes).size !== value.subtypes.length) {
     ctx.addIssue({
       code: z.ZodIssueCode.custom,
       path: ["subtypes"],

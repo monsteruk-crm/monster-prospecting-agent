@@ -4,6 +4,8 @@ import { getPrismaClient } from "@/lib/db/client";
 import { Prisma, type PrismaClient } from "@/prisma/generated/client";
 import { ReviewStatusSchema } from "@/lib/sales/review-schema";
 import { FirstMoveBriefSchema, type FirstMoveBrief } from "@/lib/sales/contact-schema";
+import { sanitizeContactRoutes } from "@/lib/sales/contact-route-engine";
+import { requiresPublicEmail } from "@/lib/sales/contact-route-engine";
 import { coerceProspectAccountClassification } from "@/lib/sales/prospect-taxonomy";
 
 export const ReviewDecisionActionSchema = z.enum([
@@ -138,12 +140,19 @@ export async function getMissionRunDossier(
     },
   });
   if (!dossier) return null;
+  const emailRequired = requiresPublicEmail(dossier.mission.brief as { contactRequirement: "ANY_ROUTE" | "PUBLIC_EMAIL"; instructions: string; buyerRoles?: string[] });
+  const accounts = dossier.accounts.map((account) => ({
+    ...account,
+    classification: coerceProspectAccountClassification(account.categories),
+    contactRoutes: sanitizeContactRoutes(account.contactRoutes),
+  }));
   return {
     ...dossier,
-    accounts: dossier.accounts.map((account) => ({
-      ...account,
-      classification: coerceProspectAccountClassification(account.categories),
-    })),
+    // Nonqualified accounts remain persisted for audit/scoring, but are not
+    // presented as mission results when the brief requires a public email.
+    accounts: emailRequired
+      ? accounts.filter((account) => account.contactRoutes.some((route) => route.routeType === "PUBLIC_EMAIL" && route.isUsableForSales))
+      : accounts,
   };
 }
 
